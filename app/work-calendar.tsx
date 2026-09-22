@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Ban, Building2, CalendarDays, CalendarRange, CheckCircle2, ChevronLeft,
-  ChevronRight, Clock3, GraduationCap, Layers3, ListChecks, Target, X,
+  ChevronRight, Clock3, GraduationCap, Layers3, ListChecks, Plane, Target, X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { FairCalendar } from "./fair-calendar";
 
 type CalendarView = "week" | "month" | "year";
 type Workspace = "aselsan" | "mtal";
@@ -142,10 +143,7 @@ export function WorkCalendar({ open, onOpenChange, tasks, onOpenTask }: {
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [scope, setScope] = useState<WorkspaceScope>("all");
   const [includeClosed, setIncludeClosed] = useState(false);
-
-  useEffect(() => {
-    if (open) setScope("all");
-  }, [open]);
+  const [section, setSection] = useState<"work" | "fair">("work");
 
   const filteredTasks = useMemo(() => tasks.filter((task) => {
     if (scope !== "all" && task.workspace !== scope) return false;
@@ -180,6 +178,11 @@ export function WorkCalendar({ open, onOpenChange, tasks, onOpenTask }: {
     onOpenTask(task.id, task.workspace);
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen) setScope("all");
+    onOpenChange(nextOpen);
+  }
+
   const periodTitle = useMemo(() => {
     if (view === "year") return `${cursor.getFullYear()} Yıllık Planı`;
     if (view === "month") return new Intl.DateTimeFormat("tr-TR", { month: "long", year: "numeric" }).format(cursor);
@@ -190,19 +193,23 @@ export function WorkCalendar({ open, onOpenChange, tasks, onOpenTask }: {
     return `${startText} – ${endText}`;
   }, [cursor, view]);
 
-  return <Dialog open={open} onOpenChange={onOpenChange}>
+  return <Dialog open={open} onOpenChange={handleOpenChange}>
     <DialogContent showCloseButton={false} className="fixed inset-0 top-0 left-0 flex h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-[#f3f6fa] p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[94dvh] sm:w-[calc(100%-2rem)] sm:max-w-[1500px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl">
       <DialogHeader className="shrink-0 border-b border-slate-200 bg-white px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-left sm:px-6 sm:py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#17365d] text-white"><CalendarRange className="size-5" /></span>
-            <div className="min-w-0"><DialogTitle className="text-lg text-[#17365d] sm:text-xl">İş Takvimi</DialogTitle><DialogDescription className="mt-1 hidden sm:block">Hedef, alt iş ve takip işlerinin başlangıç–bitiş tarihlerine göre planı</DialogDescription><p className="mt-0.5 text-sm text-slate-500 sm:hidden">Başlangıç ve bitiş tarihlerine göre plan</p></div>
+            <div className="min-w-0"><DialogTitle className="text-lg text-[#17365d] sm:text-xl">Planlama Takvimi</DialogTitle><DialogDescription className="mt-1 hidden sm:block">İş planı ile fuar takvimi birbirinden bağımsız yönetilir</DialogDescription><p className="mt-0.5 text-sm text-slate-500 sm:hidden">İş planı ve ayrı fuar takvimi</p></div>
           </div>
           <Button variant="outline" size="icon-sm" className="size-11 shrink-0 bg-white sm:size-8" onClick={() => onOpenChange(false)} aria-label="Takvimi kapat"><X /></Button>
         </div>
+        <div className="mt-3 grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:w-fit">
+          <button type="button" onClick={() => setSection("work")} className={`flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition ${section === "work" ? "bg-[#17365d] text-white shadow-sm" : "text-slate-600 hover:bg-white"}`}><CalendarRange className="size-4" /> İş Planı</button>
+          <button type="button" onClick={() => setSection("fair")} className={`flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition ${section === "fair" ? "bg-[#17365d] text-white shadow-sm" : "text-slate-600 hover:bg-white"}`}><Plane className="size-4" /> Fuar Takvimi</button>
+        </div>
       </DialogHeader>
 
-      <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 sm:py-3">
+      {section === "work" && <><div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 sm:py-3">
         <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
           <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 sm:flex">
             <Button variant="outline" size="icon-sm" className="size-11 sm:size-8" onClick={() => shift(-1)} aria-label="Önceki dönem"><ChevronLeft /></Button>
@@ -236,7 +243,8 @@ export function WorkCalendar({ open, onOpenChange, tasks, onOpenTask }: {
         {view === "week" && <WeekView cursor={cursor} tasks={datedTasks} onOpenTask={openTask} />}
         {view === "year" && <YearView year={cursor.getFullYear()} tasks={datedTasks} onOpenMonth={(month) => { const next = new Date(cursor.getFullYear(), month, 1); setCursor(next); setSelectedDate(dateKey(next)); setView("month"); }} />}
         <UndatedTasks tasks={undatedTasks} onOpenTask={openTask} />
-      </div>
+      </div></>}
+      {section === "fair" && <FairCalendar />}
     </DialogContent>
   </Dialog>;
 }
