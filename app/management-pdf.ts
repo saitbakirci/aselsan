@@ -256,10 +256,12 @@ export async function createManagementPdf(data: ManagementDashboardData) {
   const pendingApprovals = data.approvals.filter((approval) => !closedApprovalStatuses.has(approval.status));
   const plannedVisits = data.visits.filter((visit) => visit.status === "Planlandı");
   const pendingDecisionCount = activeTasks.filter((task) => task.decision.trim()).length + pendingApprovals.length;
+  const totalOpenWorkload = activeTasks.length + pendingApprovals.length + plannedVisits.length;
 
   writer.heading("Yönetici İş Yükü ve Durum Raporu", `${formatDate(data.generatedAt)} · ${data.currentUser || "Sait Bakırcı"}`);
-  writer.text(`Bu rapor, uygulamadaki hedefleri, alt işleri, takip işlerini, departman onaylarını, ziyaretleri ve karar kayıtlarını tek dosyada birleştirir. Sistemde ${activeTasks.length} aktif iş, ${overdueTasks.length} geciken kayıt ve yönetim desteği gerektiren ${pendingDecisionCount} karar/onay başlığı bulunmaktadır.`, 9.5, SLATE, 14);
+  writer.text(`Bu rapor, uygulamadaki hedefleri, alt işleri, takip işlerini, departman onaylarını, ziyaretleri ve karar kayıtlarını tek dosyada birleştirir. Günlük bir oran yerine toplam açık iş yükü gösterilir: ${totalOpenWorkload} açık sorumluluk; ${activeTasks.length} aktif iş, ${pendingApprovals.length} açık departman onayı ve ${plannedVisits.length} planlı ziyaret.`, 9.5, SLATE, 14);
   writer.metrics([
+    { label: "Toplam açık iş yükü", value: totalOpenWorkload },
     { label: "Aktif iş", value: activeTasks.length },
     { label: "Kritik iş", value: activeTasks.filter((task) => task.priority === "Kritik").length },
     { label: "Geciken", value: overdueTasks.length },
@@ -267,7 +269,6 @@ export async function createManagementPdf(data: ManagementDashboardData) {
     { label: "Yönetim gündemi", value: managementTasks.length },
     { label: "Departman onayı", value: pendingApprovals.length },
     { label: "Planlı ziyaret", value: plannedVisits.length },
-    { label: "Toplam kayıt", value: data.tasks.length + data.approvals.length + data.visits.length + data.decisions.length },
   ]);
 
   writer.section("Yönetim Gündemi ve Beklenen Kararlar", managementTasks.length + pendingApprovals.length);
