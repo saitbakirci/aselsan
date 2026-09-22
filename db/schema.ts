@@ -177,6 +177,33 @@ export const visits = sqliteTable("visits", {
   index("idx_visits_sort").on(table.sortOrder),
 ]);
 
+export const fairEvents = sqliteTable("fair_events", {
+  id: text("id").primaryKey(),
+  source: text("source").notNull().default("Manuel"),
+  sourceRef: text("source_ref").notNull(),
+  title: text("title").notNull(),
+  country: text("country").notNull().default(""),
+  city: text("city").notNull().default(""),
+  eventYear: integer("event_year").notNull(),
+  eventMonth: integer("event_month"),
+  startDate: text("start_date"),
+  endDate: text("end_date"),
+  dateNote: text("date_note").notNull().default(""),
+  participationStatus: text("participation_status").notNull().default("Değerlendirilecek"),
+  supportType: text("support_type").notNull().default("Referans"),
+  scopeNote: text("scope_note").notNull().default(""),
+  planningNote: text("planning_note").notNull().default(""),
+  isDeleted: integer("is_deleted", { mode: "boolean" }).notNull().default(false),
+  createdBy: text("created_by").notNull().default(""),
+  updatedBy: text("updated_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("idx_fair_events_source_ref").on(table.sourceRef),
+  index("idx_fair_events_year_month").on(table.eventYear, table.eventMonth),
+  index("idx_fair_events_deleted_date").on(table.isDeleted, table.startDate),
+]);
+
 export const appState = sqliteTable("app_state", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
