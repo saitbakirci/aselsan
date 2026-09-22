@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import {
-  Ban, Building2, CalendarDays, CalendarRange, CheckCircle2, ChevronLeft,
-  ChevronRight, Clock3, GraduationCap, Layers3, ListChecks, Plane, Target, X,
+  Ban, BriefcaseBusiness, Building2, CalendarDays, CalendarRange, CheckCircle2, ChevronLeft,
+  ChevronRight, Clock3, Gauge, GraduationCap, Layers3, ListChecks, Plane, Scale, Target, X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,22 @@ export type WorkCalendarTask = {
   followUpDate: string | null;
   dueDate: string | null;
   owner: string;
+};
+
+export type WorkloadSummary = {
+  totalScore: number;
+  referenceCapacity: number;
+  peopleEquivalent: number;
+  capacityPercent: number;
+  totalOpenRecords: number;
+  goals: number;
+  subtasks: number;
+  operational: number;
+  approvals: number;
+  visits: number;
+  critical: number;
+  overdue: number;
+  generatedAt: string;
 };
 
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
@@ -132,10 +148,12 @@ function taskIcon(type: CalendarTaskType) {
   return <Target />;
 }
 
-export function WorkCalendar({ open, onOpenChange, tasks, onOpenTask }: {
+export function WorkCalendar({ open, onOpenChange, tasks, workload, workloadLoading, onOpenTask }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tasks: WorkCalendarTask[];
+  workload: WorkloadSummary | null;
+  workloadLoading: boolean;
   onOpenTask: (taskId: string, workspace: Workspace) => void;
 }) {
   const [view, setView] = useState<CalendarView>("month");
@@ -209,7 +227,9 @@ export function WorkCalendar({ open, onOpenChange, tasks, onOpenTask }: {
         </div>
       </DialogHeader>
 
-      {section === "work" && <><div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 sm:py-3">
+      {section === "work" && <>
+      <WorkloadAnalysis summary={workload} loading={workloadLoading} />
+      <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 sm:py-3">
         <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
           <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 sm:flex">
             <Button variant="outline" size="icon-sm" className="size-11 sm:size-8" onClick={() => shift(-1)} aria-label="Önceki dönem"><ChevronLeft /></Button>
@@ -247,6 +267,48 @@ export function WorkCalendar({ open, onOpenChange, tasks, onOpenTask }: {
       {section === "fair" && <FairCalendar />}
     </DialogContent>
   </Dialog>;
+}
+
+function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | null; loading: boolean }) {
+  const percent = summary?.capacityPercent || 0;
+  const pressure = percent >= 400 ? "Çok yüksek yük" : percent >= 250 ? "Yüksek yük" : percent >= 100 ? "Kapasite üstü" : "Kapasite içinde";
+  const pressureTone = percent >= 400 ? "border-red-200 bg-red-50 text-red-700" : percent >= 250 ? "border-amber-200 bg-amber-50 text-amber-800" : percent >= 100 ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+  return <section className="shrink-0 border-b border-[#17365d]/15 bg-[#edf2f8] px-3 py-3 sm:px-6">
+    <div className="mx-auto grid max-w-[1450px] gap-3 rounded-2xl border border-[#17365d]/15 bg-white p-3 shadow-sm sm:p-4 xl:grid-cols-[minmax(250px,.85fr)_minmax(310px,.85fr)_minmax(520px,1.55fr)] xl:items-center">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#e8eef6] text-[#17365d]"><Gauge className="size-5" /></span>
+        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-slate-950">Toplam İş Yükü</h3><span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${pressureTone}`}>{loading ? "Hesaplanıyor" : pressure}</span></div><p className="mt-1 text-xs leading-5 text-slate-500">Tüm açık portföy · günlük veya haftalık değil</p></div>
+      </div>
+
+      <div className="grid grid-cols-3 divide-x divide-slate-200 rounded-xl border border-slate-200 bg-slate-50">
+        <WorkloadMetric label="Kapasite" value={loading || !summary ? "—" : `${summary.capacityPercent}%`} accent />
+        <WorkloadMetric label="Kişi eşdeğeri" value={loading || !summary ? "—" : summary.peopleEquivalent.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} icon={<Scale />} />
+        <WorkloadMetric label="Açık kayıt" value={loading || !summary ? "—" : summary.totalOpenRecords} />
+      </div>
+
+      <div className="min-w-0">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
+          <WorkloadPart label="Hedef" value={summary?.goals} />
+          <WorkloadPart label="Alt iş" value={summary?.subtasks} />
+          <WorkloadPart label="Takip işi" value={summary?.operational} />
+          <WorkloadPart label="Açık onay" value={summary?.approvals} />
+          <WorkloadPart label="Ziyaret" value={summary?.visits} />
+          <span className="flex shrink-0 items-center rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-700">{summary?.critical ?? "—"} kritik</span>
+          <span className="flex shrink-0 items-center rounded-xl bg-amber-50 px-3 text-xs font-semibold text-amber-800">{summary?.overdue ?? "—"} geciken</span>
+        </div>
+        <p className="mt-1.5 hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex"><BriefcaseBusiness className="size-3.5" /> Aselsan Konya ve MTAL dâhil; fuar takvimi bu hesaba katılmaz.</p>
+      </div>
+    </div>
+  </section>;
+}
+
+function WorkloadMetric({ label, value, accent = false, icon }: { label: string; value: string | number; accent?: boolean; icon?: React.ReactNode }) {
+  return <div className="min-w-0 px-2 py-2 text-center sm:px-3"><p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className={`mt-0.5 flex items-center justify-center gap-1 text-xl font-bold sm:text-2xl ${accent ? "text-[#17365d]" : "text-slate-950"}`}>{icon && <span className="[&_svg]:size-3.5 [&_svg]:text-[#2f5597]">{icon}</span>}{value}</p></div>;
+}
+
+function WorkloadPart({ label, value }: { label: string; value: number | undefined }) {
+  return <div className="min-w-[84px] shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-1.5"><p className="text-[11px] text-slate-500">{label}</p><p className="font-bold text-slate-950">{value ?? "—"}</p></div>;
 }
 
 function MonthView({ cursor, days, tasks, selectedDate, selectedTasks, onSelectDate, onOpenTask }: {
