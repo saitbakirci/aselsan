@@ -1,0 +1,317 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../vendor/shadcn-tailwind-4.13.0.css";
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
+:root {
+  --background: #f3f6fa;
+  --foreground: #172033;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #17365d;
+  --primary-foreground: #ffffff;
+  --secondary: #e8eef6;
+  --secondary-foreground: #17365d;
+  --muted: #eef2f7;
+  --muted-foreground: #64748b;
+  --accent: #e8eef6;
+  --accent-foreground: #17365d;
+  --destructive: #e7000b;
+  --border: #dbe3ed;
+  --input: #dbe3ed;
+  --ring: #2f5597;
+  --chart-1: #f54900;
+  --chart-2: #009689;
+  --chart-3: #104e64;
+  --chart-4: #ffb900;
+  --chart-5: #fe9a00;
+  --radius: 0.75rem;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: #171717;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #f5f5f5;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #a1a1a1;
+}
+
+.app-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem max(1.5rem, env(safe-area-inset-bottom));
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(47, 85, 151, 0.34), transparent 38%),
+    linear-gradient(155deg, #07182d 0%, #102a4b 58%, #07182d 100%);
+  color: #fff;
+  opacity: 1;
+  transition: opacity 380ms ease, visibility 380ms ease;
+}
+
+.app-splash--leaving {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.app-splash__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: splash-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.app-splash__icon {
+  width: 7rem;
+  height: 7rem;
+  border-radius: 1.75rem;
+  box-shadow: 0 1.25rem 3.5rem rgba(0, 0, 0, 0.36), 0 0 0 1px rgba(217, 154, 98, 0.24);
+}
+
+.app-splash__brand {
+  margin: 1.35rem 0 0;
+  font-size: clamp(1.6rem, 7vw, 2rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.app-splash__product {
+  margin: 0.45rem 0 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-splash__loader {
+  width: 6rem;
+  height: 0.2rem;
+  margin-top: 2rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.app-splash__loader span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #c47a44, #f0b77d);
+  animation: splash-progress 1.15s ease-in-out both;
+}
+
+@keyframes splash-rise {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes splash-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(240%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-splash,
+  .app-splash__content,
+  .app-splash__loader span {
+    animation: none;
+    transition-duration: 1ms;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  min-width: 320px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea, [role="combobox"] { -webkit-tap-highlight-color: transparent; }
+
+.install-step {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.5rem;
+  background: #17365d;
+  color: white;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  body { padding-bottom: env(safe-area-inset-bottom); }
+
+  /* ChatGPT'nin iPhone site önizlemesindeki üst paylaşım ve alt düzenleme
+     kontrolleri uygulama katmanının üzerinde durur. Toplantı ekranlarının
+     etkileşimli başlık ve alt alanlarını bu kontrollerin dışında tutar. */
+  .meeting-fullscreen-safe {
+    top: 7.75rem !important;
+    bottom: 5.5rem !important;
+    height: auto !important;
+  }
+
+  .meeting-modal-safe {
+    top: 7.75rem !important;
+    bottom: 5.5rem !important;
+    max-height: none !important;
+    transform: translateX(-50%) !important;
+  }
+
+  /* Toplantı özeti mobilde ikinci bir merkezlenmiş modal olarak açıldığında
+     iOS WebView ekranı yarıya bölüyordu. Özeti mobilde gerçek bir tam genişlik
+     çalışma yüzeyi olarak sabitliyoruz. */
+  .meeting-summary-safe {
+    top: 7.75rem !important;
+    right: 0 !important;
+    bottom: 5.5rem !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    transform: none !important;
+    border-radius: 0 !important;
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 640px) {
+  .meeting-fullscreen-safe {
+    top: env(safe-area-inset-top) !important;
+    bottom: env(safe-area-inset-bottom) !important;
+  }
+
+  .meeting-modal-safe {
+    top: max(1rem, env(safe-area-inset-top)) !important;
+    bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .meeting-summary-safe {
+    top: env(safe-area-inset-top) !important;
+    right: env(safe-area-inset-right) !important;
+    bottom: env(safe-area-inset-bottom) !important;
+    left: env(safe-area-inset-left) !important;
+  }
+}
+
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  html.printing-management-report,
+  html.printing-management-report body {
+    background: white !important;
+  }
+  html.printing-management-report body * {
+    visibility: hidden !important;
+  }
+  html.printing-management-report #management-print-report,
+  html.printing-management-report #management-print-report * {
+    visibility: visible !important;
+  }
+  html.printing-management-report #management-print-report {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    background: white !important;
+    color: #0f172a;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html.printing-management-report .report-title {
+    display: block !important;
+    margin-bottom: 8mm;
+    border-bottom: 2px solid #17365d;
+    padding-bottom: 4mm;
+  }
+  html.printing-management-report .report-title h1 {
+    color: #17365d;
+    font-size: 20pt;
+    font-weight: 700;
+  }
+  html.printing-management-report .report-title p {
+    margin-top: 2mm;
+    color: #64748b;
+    font-size: 9pt;
+  }
+  html.printing-management-report article,
+  html.printing-management-report .report-table {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+  html.printing-management-report table {
+    font-size: 8pt;
+  }
+  html.printing-management-report th,
+  html.printing-management-report td {
+    padding: 5px !important;
+  }
+}
