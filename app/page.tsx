@@ -7,7 +7,6 @@ import {
   ExternalLink, FileText, Filter, History, Layers3, Loader2, Plus,
   RefreshCw, Search, ShieldCheck, Smartphone, Target, Trash2, Users,
   PauseCircle, Workflow, ListChecks, GraduationCap,
-  BriefcaseBusiness, Gauge, Scale,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,7 +30,7 @@ import { ManagementDashboard } from "./management-dashboard";
 import { MeetingCenter, type MeetingCenterHandle } from "./meeting-center";
 import { TaskAttachments } from "./task-attachments";
 import { VisitCenter } from "./visit-center";
-import { WorkCalendar } from "./work-calendar";
+import { WorkCalendar, type WorkloadSummary } from "./work-calendar";
 
 type Priority = "Kritik" | "Yüksek" | "Orta" | "Düşük";
 type Status = "Başlamadı" | "Devam Ediyor" | "Beklemede" | "Onay Bekliyor" | "Tamamlandı" | "İptal Edildi";
@@ -60,12 +59,6 @@ type TasksResponse = { tasks: Task[]; currentUser?: string };
 type TaskResponse = { task: Task };
 type MemoriesResponse = { entries: MemoryEntry[] };
 type MemoryResponse = { entry: MemoryEntry };
-type WorkloadSummary = {
-  totalScore: number; referenceCapacity: number; peopleEquivalent: number; capacityPercent: number;
-  totalOpenRecords: number; goals: number; subtasks: number; operational: number;
-  approvals: number; visits: number; critical: number; overdue: number; generatedAt: string;
-};
-
 const priorities: Priority[] = ["Kritik", "Yüksek", "Orta", "Düşük"];
 const statuses: Status[] = ["Başlamadı", "Devam Ediyor", "Beklemede", "Onay Bekliyor", "Tamamlandı", "İptal Edildi"];
 const memoryKinds: MemoryKind[] = ["İlerleme", "Karar", "Yöntem", "Plan", "Doküman", "Toplantı Notu"];
@@ -472,8 +465,6 @@ export default function Home() {
           </div>
         </section>
 
-        <WorkloadAnalysis summary={workload} loading={workloadLoading} />
-
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
           <MetricCard label="Açık hedefler" value={metrics.open} icon={<CircleDot />} tone="navy" active={view === "active" && statusFilter === "Tümü" && priorityFilter === "Tümü"} onClick={() => { setView("active"); setStatusFilter("Tümü"); setPriorityFilter("Tümü"); }} />
           <MetricCard label="Kritik hedefler" value={metrics.critical} icon={<AlertTriangle />} tone="red" active={priorityFilter === "Kritik"} onClick={() => { setPriorityFilter(priorityFilter === "Kritik" ? "Tümü" : "Kritik"); setStatusFilter("Tümü"); setView("active"); }} />
@@ -528,7 +519,7 @@ export default function Home() {
       </div>
 
       <TaskEditor open={editorOpen} onOpenChange={setEditorOpen} draft={draft} setDraft={setDraft} goals={workspaceGoals} editing={Boolean(editingId)} saving={saving} onSave={saveTask} />
-      <WorkCalendar open={calendarOpen} onOpenChange={setCalendarOpen} tasks={tasks} onOpenTask={(taskId, taskWorkspaceValue) => { const task = tasks.find((item) => item.id === taskId); if (task) { setWorkspace(taskWorkspaceValue); openDetails(task); } }} />
+      <WorkCalendar open={calendarOpen} onOpenChange={setCalendarOpen} tasks={tasks} workload={workload} workloadLoading={workloadLoading} onOpenTask={(taskId, taskWorkspaceValue) => { const task = tasks.find((item) => item.id === taskId); if (task) { setWorkspace(taskWorkspaceValue); openDetails(task); } }} />
       <GoalDetailSheet open={detailOpen} onOpenChange={setDetailOpen} task={selectedTask} parent={selectedParent} childTasks={selectedChildren} memories={memories} memoryLoading={memoryLoading} onEditTask={openEdit} onDeleteTask={(task) => setDeleteId(task.id)} onStatus={updateStatus} onAddSubtask={(goalId) => { setDetailOpen(false); openNewTask("subtask", goalId); }} onAddMemory={openNewMemory} onEditMemory={openEditMemory} onDeleteMemory={(entry) => setMemoryDeleteId(entry.id)} onOpenParent={(parentTask) => openDetails(parentTask)} />
       <OperationalDialog open={operationalOpen} onOpenChange={setOperationalOpen} tasks={workspaceOperationalTasks} onAdd={() => { setOperationalOpen(false); openNewTask("operational"); }} onOpen={(task) => { setOperationalOpen(false); openDetails(task); }} onEdit={openEdit} onDelete={(task) => setDeleteId(task.id)} onStatus={updateStatus} onReorder={reorderTaskIds} />
       <MemoryEditor open={memoryEditorOpen} onOpenChange={setMemoryEditorOpen} draft={memoryDraft} setDraft={setMemoryDraft} editing={Boolean(editingMemoryId)} saving={memorySaving} onSave={saveMemory} />
@@ -538,40 +529,6 @@ export default function Home() {
       <AlertDialog open={Boolean(memoryDeleteId)} onOpenChange={(open) => !open && setMemoryDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Bu hafıza kaydını silmek istiyor musunuz?</AlertDialogTitle><AlertDialogDescription>Geçmiş bilgi veya doküman kaydı kalıcı olarak kaldırılacaktır.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Vazgeç</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={deleteMemory}>Sil</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </main>
   );
-}
-
-function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | null; loading: boolean }) {
-  const percent = summary?.capacityPercent || 0;
-  const pressure = percent >= 400 ? "Çok yüksek toplam yük" : percent >= 250 ? "Yüksek toplam yük" : percent >= 100 ? "Referans kapasitenin üzerinde" : "Referans kapasite içinde";
-  const pressureTone = percent >= 400 ? "border-red-200 bg-red-50 text-red-700" : percent >= 250 ? "border-amber-200 bg-amber-50 text-amber-800" : percent >= 100 ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
-  return <section className="mb-5 overflow-hidden rounded-2xl border border-[#17365d]/15 bg-white shadow-[0_12px_35px_rgba(23,54,93,0.06)]">
-    <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(230px,.8fr)_minmax(230px,.7fr)_minmax(0,1.5fr)] xl:items-center">
-      <div className="flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#e8eef6] text-[#17365d]"><Gauge className="size-5" /></span>
-        <div><h3 className="text-lg font-bold text-slate-950">İş Yükü ve Kapasite</h3><p className="mt-1 text-sm leading-5 text-slate-500">Son yedi gün değil; tüm açık sorumlulukların toplamı</p><span className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${pressureTone}`}>{loading ? "Hesaplanıyor" : pressure}</span></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-1">
-        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Toplam kapasite yükü</p><p className="mt-1 text-4xl font-bold tracking-tight text-[#17365d] sm:text-5xl">{loading || !summary ? "—" : `${summary.capacityPercent}%`}</p></div>
-        <div className="border-l border-slate-200 pl-3 xl:border-l-0 xl:border-t xl:pl-0 xl:pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Kişi eşdeğeri</p><p className="mt-1 flex items-end gap-1.5 text-2xl font-bold text-slate-950"><Scale className="mb-1 size-5 text-[#2f5597]" />{loading || !summary ? "—" : summary.peopleEquivalent.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}<span className="pb-0.5 text-sm font-medium text-slate-500">kişi</span></p></div>
-      </div>
-      <div>
-        <div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-slate-800">Toplam açık kayıt</p><span className="text-2xl font-bold text-slate-950">{loading || !summary ? "—" : summary.totalOpenRecords}</span></div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-5">
-          <WorkloadPart label="Hedef" value={summary?.goals} />
-          <WorkloadPart label="Alt iş" value={summary?.subtasks} />
-          <WorkloadPart label="Takip işi" value={summary?.operational} />
-          <WorkloadPart label="Açık onay" value={summary?.approvals} />
-          <WorkloadPart label="Ziyaret" value={summary?.visits} />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium"><span className="rounded-full bg-red-50 px-2.5 py-1 text-red-700">{summary?.critical ?? "—"} kritik</span><span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">{summary?.overdue ?? "—"} geciken</span></div>
-      </div>
-    </div>
-    <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3 text-xs leading-5 text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5"><span className="inline-flex items-center gap-1.5"><BriefcaseBusiness className="size-3.5" /> Aselsan Konya ve MTAL dâhil tüm açık portföy</span><span>Hedef, alt iş ve takip işi; öncelik ve bitiş riskiyle ağırlıklandırılır. Açık onaylar ve planlı ziyaretler ayrıca eklenir.</span></div>
-  </section>;
-}
-
-function WorkloadPart({ label, value }: { label: string; value: number | undefined }) {
-  return <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><p className="text-xs text-slate-500">{label}</p><p className="mt-0.5 text-lg font-bold text-slate-950">{value ?? "—"}</p></div>;
 }
 
 function MetricCard({ label, value, icon, tone, active, onClick }: { label: string; value: number; icon: React.ReactNode; tone: "navy" | "red" | "amber" | "blue" | "green" | "rose" | "slate"; active: boolean; onClick: () => void }) {
