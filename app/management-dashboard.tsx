@@ -81,6 +81,10 @@ export function ManagementDashboard() {
     const overdue = activeTasks.filter((task) => (daysUntil(task.dueDate) ?? 0) < 0).length;
     const management = activeTasks.filter((task) => task.managementAgenda).length;
     const managementTasks = activeTasks.filter((task) => task.managementAgenda);
+    const goalCount = activeTasks.filter((task) => task.taskType === "goal").length;
+    const subtaskCount = activeTasks.filter((task) => task.taskType === "subtask").length;
+    const operationalCount = activeTasks.filter((task) => task.taskType === "operational").length;
+    const totalWorkload = activeTasks.length + activeApprovals.length + plannedVisits.length;
 
     const people = new Map<string, { name: string; Hedef: number; "Alt İş": number; "Takip İşi": number; Onay: number; Ziyaret: number; score: number }>();
     function person(name: string) {
@@ -114,7 +118,7 @@ export function ManagementDashboard() {
 
     const aselsanCount = activeTasks.filter((task) => workspaceOf(task) === "aselsan").length;
     const mtalCount = activeTasks.filter((task) => workspaceOf(task) === "mtal").length;
-    return { activeTasks, activeApprovals, plannedVisits, pendingDecisions, critical, overdue, management, managementTasks, peopleLoad, statusData, categoryLoad, aselsanCount, mtalCount };
+    return { activeTasks, activeApprovals, plannedVisits, pendingDecisions, critical, overdue, management, managementTasks, peopleLoad, statusData, categoryLoad, aselsanCount, mtalCount, goalCount, subtaskCount, operationalCount, totalWorkload };
   }, [data]);
 
   async function exportPdf() {
@@ -147,6 +151,19 @@ export function ManagementDashboard() {
         </DialogHeader>
         {loading || !report || !data ? <div className="grid min-h-[70vh] place-items-center text-slate-500"><Loader2 className="size-8 animate-spin" /></div> : <main id="management-print-report" className="mx-auto w-full max-w-[1500px] p-4 sm:p-6 lg:p-8">
           <section className="report-title hidden"><h1>Coppersmith AI · Yönetim İş Yükü Raporu</h1><p>{new Intl.DateTimeFormat("tr-TR", { dateStyle: "long", timeStyle: "short" }).format(new Date(data.generatedAt))}</p></section>
+          <section className="mb-4 rounded-2xl border border-[#17365d]/15 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#e8eef6] text-[#17365d]"><BriefcaseBusiness className="size-5" /></span><div><h2 className="font-semibold text-slate-950">Toplam Açık İş Yükü</h2><p className="mt-1 text-sm text-slate-500">Günlük veya son yedi günlük oran değil; halen sorumluluğunuzda bulunan tüm açık kayıtlar</p></div></div>
+              <div className="flex items-end gap-2"><strong className="text-5xl font-bold leading-none text-[#17365d]">{report.totalWorkload}</strong><span className="pb-1 text-sm font-medium text-slate-500">açık sorumluluk</span></div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <LoadPart label="Hedef / Proje" value={report.goalCount} />
+              <LoadPart label="Alt İş" value={report.subtaskCount} />
+              <LoadPart label="Takip İşi" value={report.operationalCount} />
+              <LoadPart label="Departman Onayı" value={report.activeApprovals.length} />
+              <LoadPart label="Planlı Ziyaret" value={report.plannedVisits.length} />
+            </div>
+          </section>
           <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
             <Kpi icon={<BriefcaseBusiness />} label="Aktif iş" value={report.activeTasks.length} tone="blue" />
             <Kpi icon={<AlertTriangle />} label="Kritik iş" value={report.critical} tone="red" />
@@ -171,7 +188,7 @@ export function ManagementDashboard() {
                 <div className="rounded-xl bg-[#e8eef6] p-4"><Building2 className="size-5 text-[#17365d]" /><p className="mt-3 text-sm text-slate-600">Aselsan Konya</p><p className="text-3xl font-bold text-[#17365d]">{report.aselsanCount}</p></div>
                 <div className="rounded-xl bg-cyan-50 p-4"><GraduationCap className="size-5 text-cyan-800" /><p className="mt-3 text-sm text-slate-600">MTAL</p><p className="text-3xl font-bold text-cyan-900">{report.mtalCount}</p></div>
               </div>
-              <div className="mt-4 rounded-xl border border-slate-200 p-4"><p className="text-sm font-semibold text-slate-800">Sait Bakırcı toplam yük puanı</p><p className="mt-1 text-4xl font-bold text-[#17365d]">{report.peopleLoad.find((item) => item.name === "Sait Bakırcı")?.score || 0}</p><p className="mt-1 text-xs text-slate-500">Aktif sorumlulukların ağırlıklı göstergesi</p></div>
+              <div className="mt-4 rounded-xl border border-slate-200 p-4"><p className="text-sm font-semibold text-slate-800">Toplam açık sorumluluk</p><p className="mt-1 text-4xl font-bold text-[#17365d]">{report.totalWorkload}</p><p className="mt-1 text-xs text-slate-500">Tüm açık hedef, iş, onay ve planlı ziyaretlerin net toplamı</p></div>
             </article>
           </section>
 
@@ -218,6 +235,10 @@ export function ManagementDashboard() {
 
 function SummaryNote({ title, text }: { title: string; text: string }) {
   return <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><h3 className="text-sm font-semibold text-[#17365d]">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{text}</p></div>;
+}
+
+function LoadPart({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-xl font-bold text-slate-950">{value}</p></div>;
 }
 
 function EmptyReport({ text }: { text: string }) {
