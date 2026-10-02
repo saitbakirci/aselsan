@@ -373,8 +373,8 @@ export function DepartmentApprovals() {
 
           <div className="flex flex-col gap-3 border-y border-slate-200 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative min-w-0 flex-1 sm:max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Başlık, gerekçe veya talep türü ara" className="pl-9" /></div>
-            <div className="flex gap-2">
-              <Select value={view} onValueChange={(value) => setView(value as ApprovalView)}><SelectTrigger className="min-w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Açık talepler</SelectItem><SelectItem value="pending">Onay bekleyenler</SelectItem><SelectItem value="approved">Onaylananlar</SelectItem><SelectItem value="resolved">Sonuçlananlar</SelectItem><SelectItem value="all">Tüm kayıtlar</SelectItem></SelectContent></Select>
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Select value={view} onValueChange={(value) => setView(value as ApprovalView)}><SelectTrigger className="min-w-0 sm:min-w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Açık talepler</SelectItem><SelectItem value="pending">Onay bekleyenler</SelectItem><SelectItem value="approved">Onaylananlar</SelectItem><SelectItem value="resolved">Sonuçlananlar</SelectItem><SelectItem value="all">Tüm kayıtlar</SelectItem></SelectContent></Select>
               <Button className="bg-[#17365d]" onClick={openNew}><Plus /> Yeni Talep</Button>
             </div>
           </div>

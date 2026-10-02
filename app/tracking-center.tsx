@@ -233,7 +233,7 @@ export function TrackingCenter({ open, onOpenChange, tasks, workspace, onAddTask
 
   return <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent showCloseButton={false} className="fixed inset-0 top-0 left-0 flex h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-[#f3f6fa] p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[94dvh] sm:w-[calc(100%-2rem)] sm:max-w-6xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl">
+      <DialogContent showCloseButton={false} onOpenAutoFocus={(event) => event.preventDefault()} className="fixed inset-0 top-0 left-0 flex h-[100svh] max-h-[100svh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden overscroll-none rounded-none border-0 bg-[#f3f6fa] p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[94dvh] sm:w-[calc(100%-2rem)] sm:max-w-6xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl">
         <DialogHeader className="shrink-0 border-b border-slate-200 bg-white px-4 pb-4 pt-[max(0.75rem,env(safe-area-inset-top))] text-left sm:px-6 sm:py-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#17365d] text-white"><ListChecks className="size-5" /></span><div><DialogTitle className="text-xl text-[#17365d]">Takip Listesi ve Efor</DialogTitle><DialogDescription className="mt-1">Yalnızca anlık ve operasyonel iş yükünüz; hedefler ve alt işler bu listeye dahil edilmez.</DialogDescription></div></div>
@@ -258,9 +258,9 @@ export function TrackingCenter({ open, onOpenChange, tasks, workspace, onAddTask
           </section>
 
           {view !== "weekly" ? <>
-            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0 flex-1"><p className="mb-2 text-sm font-semibold text-slate-900">{view === "active" ? "Açık takip işleri" : "Tamamlanan takip işleri"}</p><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Takip işi, kategori veya sorumlu ara" className="pl-9" /></div></div>
-              <Button className="bg-[#17365d]" onClick={onAddTask}><Plus /> Takip İşi Ekle</Button>
+              <Button className="w-full shrink-0 bg-[#17365d] sm:w-auto" onClick={onAddTask}><Plus /> Takip İşi Ekle</Button>
             </div>
             {loading ? <div className="grid min-h-52 place-items-center text-slate-500"><Loader2 className="size-6 animate-spin" /></div> : <div className="mt-4 grid gap-4 xl:grid-cols-2">{visibleTracking.length === 0 ? <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">{view === "active" ? "Açık takip işi bulunmuyor." : "Tamamlanan takip işi bulunmuyor."}</div> : visibleTracking.map((task) => {
               const actual = minutesByTask[task.id] || 0;

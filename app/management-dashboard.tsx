@@ -144,7 +144,7 @@ export function ManagementDashboard() {
   return <>
     <Button size="sm" className="bg-[#17365d] text-white hover:bg-[#244b7a]" onClick={openReport}><BarChart3 /><span className="hidden sm:inline">Yönetim Görünümü</span></Button>
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="management-dialog left-0 top-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-y-auto rounded-none border-0 bg-[#eef3f9] p-0 sm:max-w-none">
+      <DialogContent onOpenAutoFocus={(event) => event.preventDefault()} className="management-dialog left-0 top-0 h-[100svh] max-h-[100svh] w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-y-auto overscroll-y-contain rounded-none border-0 bg-[#eef3f9] p-0 sm:max-w-none">
         <DialogHeader className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur md:px-8">
           <div className="flex flex-wrap items-center justify-between gap-3 pr-10">
             <div className="flex min-w-0 items-center gap-3">

@@ -391,7 +391,7 @@ function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurre
   return (
     <>
       <div className="fixed inset-0 z-[59] bg-black/70" aria-hidden="true" />
-      <div role="dialog" aria-modal="true" aria-label={standalone ? "Toplantı notu" : "Toplantı sunumu"} className="meeting-fullscreen-safe fixed inset-0 z-[60] h-dvh w-screen overflow-hidden bg-[#071425]">
+      <div role="dialog" aria-modal="true" aria-label={standalone ? "Toplantı notu" : "Toplantı sunumu"} className="meeting-fullscreen-safe fixed inset-0 z-[60] h-[100svh] max-h-[100svh] w-screen overflow-hidden overscroll-none bg-[#071425]">
         {detail && (item || standalone) ? (
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
             <header className="flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#0b1f38] px-3 py-3 text-white sm:px-6">

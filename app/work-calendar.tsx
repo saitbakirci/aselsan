@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Ban, BriefcaseBusiness, Building2, CalendarDays, CalendarRange, CheckCircle2, ChevronLeft,
   ChevronRight, Clock3, Gauge, GraduationCap, Layers3, ListChecks, Plane, Scale, Target, X,
@@ -174,6 +174,13 @@ export function WorkCalendar({ open, onOpenChange, tasks, workload, workloadLoad
   const [scope, setScope] = useState<WorkspaceScope>("all");
   const [includeClosed, setIncludeClosed] = useState(false);
   const [section, setSection] = useState<"work" | "fair">("work");
+  const workScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || section !== "work") return;
+    const frame = window.requestAnimationFrame(() => workScrollRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, section]);
 
   const filteredTasks = useMemo(() => tasks.filter((task) => {
     if (scope !== "all" && task.workspace !== scope) return false;
@@ -224,7 +231,7 @@ export function WorkCalendar({ open, onOpenChange, tasks, workload, workloadLoad
   }, [cursor, view]);
 
   return <Dialog open={open} onOpenChange={handleOpenChange}>
-    <DialogContent showCloseButton={false} className="fixed inset-0 top-0 left-0 flex h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-[#f3f6fa] p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[94dvh] sm:w-[calc(100%-2rem)] sm:max-w-[1500px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl">
+    <DialogContent showCloseButton={false} onOpenAutoFocus={(event) => event.preventDefault()} className="fixed inset-0 top-0 left-0 flex h-[100svh] max-h-[100svh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden overscroll-none rounded-none border-0 bg-[#f3f6fa] p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[94dvh] sm:w-[calc(100%-2rem)] sm:max-w-[1500px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl">
       <DialogHeader className="shrink-0 border-b border-slate-200 bg-white px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-left sm:px-6 sm:py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
@@ -239,9 +246,9 @@ export function WorkCalendar({ open, onOpenChange, tasks, workload, workloadLoad
         </div>
       </DialogHeader>
 
-      {section === "work" && <>
+      {section === "work" && <div ref={workScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
       <WorkloadAnalysis summary={workload} loading={workloadLoading} />
-      <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 sm:py-3">
+      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur sm:px-6 sm:py-3">
         <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
           <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 sm:flex">
             <Button variant="outline" size="icon-sm" className="size-11 sm:size-8" onClick={() => shift(-1)} aria-label="Önceki dönem"><ChevronLeft /></Button>
@@ -270,12 +277,12 @@ export function WorkCalendar({ open, onOpenChange, tasks, workload, workloadLoad
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-5">
+      <div className="p-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-5">
         {view === "month" && <MonthView cursor={cursor} days={days} tasks={datedTasks} selectedDate={selectedDate} selectedTasks={selectedTasks} onSelectDate={setSelectedDate} onOpenTask={openTask} />}
         {view === "week" && <WeekView cursor={cursor} tasks={datedTasks} onOpenTask={openTask} />}
         {view === "year" && <YearView year={cursor.getFullYear()} tasks={datedTasks} onOpenMonth={(month) => { const next = new Date(cursor.getFullYear(), month, 1); setCursor(next); setSelectedDate(dateKey(next)); setView("month"); }} />}
         <UndatedTasks tasks={undatedTasks} onOpenTask={openTask} />
-      </div></>}
+      </div></div>}
       {section === "fair" && <FairCalendar />}
     </DialogContent>
   </Dialog>;
@@ -286,6 +293,13 @@ function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | nul
   const pressure = capacityPercent >= 400 ? "Çok yüksek toplam yük" : capacityPercent >= 200 ? "Yüksek toplam yük" : capacityPercent >= 100 ? "Tam kapasite üzeri" : "Yönetilebilir yük";
   const pressureTone = capacityPercent >= 400 ? "border-red-200 bg-red-50 text-red-700" : capacityPercent >= 200 ? "border-amber-200 bg-amber-50 text-amber-800" : capacityPercent >= 100 ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
   const categoryMaximum = Math.max(1, ...(summary?.categoryBreakdown || []).map((item) => item.remainingMinutes));
+  const categoryScrollerRef = useRef<HTMLDivElement>(null);
+
+  function scrollCategories(direction: -1 | 1) {
+    const scroller = categoryScrollerRef.current;
+    if (!scroller) return;
+    scroller.scrollBy({ left: direction * Math.max(260, scroller.clientWidth * 0.78), behavior: "smooth" });
+  }
 
   return <section className="shrink-0 border-b border-[#17365d]/15 bg-[#edf2f8] px-3 py-3 sm:px-6">
     <div className="mx-auto max-w-[1450px] rounded-2xl border border-[#17365d]/15 bg-white p-3 shadow-sm sm:p-4">
@@ -317,16 +331,33 @@ function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | nul
       </div>
 
       <div className="mt-3 border-t border-slate-100 pt-3">
-        <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-slate-900">Kategori yoğunluğu</p><p className="text-[11px] text-slate-500">Açık işlerin kalan aktif efor içindeki payı</p></div><Badge variant="outline">{summary?.categoryBreakdown?.length || 0} kategori</Badge></div>
-        <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
-          {(summary?.categoryBreakdown || []).map((item) => <div key={item.category} className="min-w-[165px] max-w-[190px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-            <p className="truncate text-xs font-semibold text-slate-700" title={item.category}>{item.category}</p>
-            <div className="mt-1 flex items-end justify-between gap-2"><span className="text-base font-bold text-[#17365d]">{formatEffort(item.remainingMinutes)}</span><span className="text-[11px] font-semibold text-slate-500">%{item.sharePercent}</span></div>
+        <div className="mb-2.5 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Kategori yoğunluğu</p>
+            <p className="text-[11px] text-slate-500">Açık işlerin kalan aktif efor içindeki payı</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Badge variant="outline">{summary?.categoryBreakdown?.length || 0} kategori</Badge>
+            <div className="flex items-center gap-1 lg:hidden" aria-label="Kategori kartlarında gezinme">
+              <Button type="button" variant="outline" size="icon-sm" className="size-8 bg-white" onClick={() => scrollCategories(-1)} aria-label="Önceki kategoriler"><ChevronLeft /></Button>
+              <Button type="button" variant="outline" size="icon-sm" className="size-8 bg-white" onClick={() => scrollCategories(1)} aria-label="Sonraki kategoriler"><ChevronRight /></Button>
+            </div>
+          </div>
+        </div>
+        <div
+          ref={categoryScrollerRef}
+          className="grid touch-auto snap-x snap-mandatory grid-flow-col auto-cols-[minmax(245px,82%)] gap-2 overflow-x-auto scroll-smooth pb-2 pr-4 sm:auto-cols-[minmax(250px,46%)] lg:grid-flow-row lg:auto-cols-auto lg:grid-cols-4 lg:overflow-visible lg:pb-0 lg:pr-0 xl:grid-cols-6"
+          aria-label="Kategori yoğunluğu kartları"
+        >
+          {(summary?.categoryBreakdown || []).map((item) => <div key={item.category} className="min-w-0 snap-start rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 transition hover:border-[#2f5597]/35 hover:bg-white hover:shadow-sm lg:snap-none">
+            <p className="min-h-8 text-xs font-semibold leading-4 text-slate-700" title={item.category}>{item.category}</p>
+            <div className="mt-1 flex items-end justify-between gap-2"><span className="text-base font-bold text-[#17365d]">{formatEffort(item.remainingMinutes)}</span><span className="shrink-0 text-[11px] font-semibold text-slate-500">%{item.sharePercent}</span></div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-[#2f5597]" style={{ width: `${Math.max(4, Math.round(item.remainingMinutes / categoryMaximum * 100))}%` }} /></div>
             <p className="mt-1.5 text-[11px] text-slate-500">{item.taskCount} açık kayıt</p>
           </div>)}
           {!loading && (summary?.categoryBreakdown?.length || 0) === 0 && <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">Açık iş kategorisi bulunmuyor.</p>}
         </div>
+        {(summary?.categoryBreakdown?.length || 0) > 1 && <p className="mt-1 flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 lg:hidden"><ChevronLeft className="size-3.5" /> Kartları kaydırın <ChevronRight className="size-3.5" /></p>}
       </div>
     </div>
   </section>;

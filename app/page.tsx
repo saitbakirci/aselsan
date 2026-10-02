@@ -472,11 +472,11 @@ export default function Home() {
       </header>
 
       <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-        <nav className="scrollbar-none mb-5 flex w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm sm:w-fit" aria-label="Çalışma alanı ve takvim">
-          <button onClick={() => { setWorkspace("aselsan"); setSelectedGoalIds([]); setView("active"); }} className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${workspace === "aselsan" ? "bg-[#17365d] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Building2 className="size-4" /> Aselsan Konya</button>
-          <button onClick={() => { setWorkspace("mtal"); setSelectedGoalIds([]); setView("active"); }} className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${workspace === "mtal" ? "bg-cyan-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="size-4" /> Aselsan Konya MTAL</button>
-          <span className="my-1 w-px shrink-0 bg-slate-200" aria-hidden="true" />
-          <button onClick={() => setCalendarOpen(true)} className="flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-[#17365d] transition hover:bg-[#e8eef6]"><CalendarDays className="size-4" /> Takvim</button>
+        <nav className="mb-5 grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm sm:flex sm:w-fit" aria-label="Çalışma alanı ve takvim">
+          <button onClick={() => { setWorkspace("aselsan"); setSelectedGoalIds([]); setView("active"); }} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition sm:gap-2 sm:px-4 ${workspace === "aselsan" ? "bg-[#17365d] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Building2 className="size-4 shrink-0" /> <span className="truncate">Aselsan Konya</span></button>
+          <button onClick={() => { setWorkspace("mtal"); setSelectedGoalIds([]); setView("active"); }} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition sm:gap-2 sm:px-4 ${workspace === "mtal" ? "bg-cyan-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="size-4 shrink-0" /> <span className="sm:hidden">MTAL</span><span className="hidden sm:inline">Aselsan Konya MTAL</span></button>
+          <span className="my-1 hidden w-px shrink-0 bg-slate-200 sm:block" aria-hidden="true" />
+          <button onClick={() => setCalendarOpen(true)} className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#17365d] transition hover:bg-[#e8eef6] sm:gap-2 sm:px-4"><CalendarDays className="size-4 shrink-0" /> Takvim</button>
         </nav>
         <section className="mb-5 flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end"><div><p className="text-sm font-medium text-slate-500">{new Intl.DateTimeFormat("tr-TR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date())}</p><h2 className="mt-1 text-2xl font-bold tracking-[-0.025em] text-slate-950 sm:text-3xl">{workspace === "mtal" ? "MTAL çalışma gündemi" : "Güncel çalışma gündemi"}</h2></div><Button size="lg" className="h-11 w-full rounded-xl bg-[#17365d] px-5 text-white shadow-sm hover:bg-[#244b7a] sm:w-auto" onClick={() => meetingCenterRef.current?.openStart()}><ClipboardList /> Toplantı Notu</Button></div>
@@ -501,13 +501,13 @@ export default function Home() {
 
         <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_35px_rgba(23,54,93,0.06)]">
           <div className="border-b border-slate-200 p-4 sm:p-5">
-            <div className="grid gap-3 2xl:grid-cols-[minmax(560px,1fr)_auto] 2xl:items-center">
-              <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(280px,1fr)_170px_170px]">
-                <div className="relative min-w-[280px]"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input type="search" name="task-search" autoComplete="off" aria-label="Hedeflerde ara" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Hedef, sorumlu veya sonraki aksiyon ara" className="h-10 min-w-[280px] border-slate-200 bg-slate-50 pl-9 pr-3 text-base focus:bg-white sm:text-sm" /></div>
+            <div className="grid gap-4 2xl:grid-cols-[minmax(560px,1fr)_auto] 2xl:items-end">
+              <div className="min-w-0"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Ara ve filtrele</p><div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(280px,1fr)_170px_170px]">
+                <div className="relative min-w-0"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input type="search" name="task-search" autoComplete="off" aria-label="Hedeflerde ara" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Hedef, sorumlu veya sonraki aksiyon ara" className="h-10 min-w-0 border-slate-200 bg-slate-50 pl-9 pr-3 text-base focus:bg-white sm:text-sm" /></div>
                 <Select value={priorityFilter} onValueChange={setPriorityFilter}><SelectTrigger className="h-10 w-full border-slate-200 bg-white"><Filter className="size-4" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Tümü">Tüm öncelikler</SelectItem>{priorities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
                 <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setView(value === "Tümü" ? "active" : "all"); }}><SelectTrigger className="h-10 w-full border-slate-200 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Tümü">Tüm durumlar</SelectItem>{statuses.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>
-              </div>
-              <div className="flex flex-wrap gap-2 2xl:justify-end">
+              </div></div>
+              <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 2xl:text-right">Görünüm ve çıktı</p><div className="flex flex-wrap gap-2 2xl:justify-end">
                 <MeetingCenter ref={meetingCenterRef} selectedTasks={selectedGoalIds.map((id) => goals.find((task) => task.id === id)).filter((task): task is Task => Boolean(task)).map((task) => ({ id: task.id, title: task.title }))} onClearSelection={() => setSelectedGoalIds([])} />
                 <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
                   <Button variant={view !== "completed" ? "secondary" : "ghost"} size="sm" onClick={() => { setView("active"); setStatusFilter("Tümü"); }}>Devam Edenler <Badge variant="outline">{metrics.open}</Badge></Button>
@@ -516,7 +516,7 @@ export default function Home() {
                 <Button variant={view === "week" ? "secondary" : "outline"} size="sm" onClick={() => setView(view === "week" ? "active" : "week")}>Bu hafta</Button>
                 <Button variant={view === "undated" ? "secondary" : "outline"} size="sm" onClick={() => setView(view === "undated" ? "active" : "undated")}>Bitiş tarihi yok</Button>
                 <Button variant="outline" size="sm" className="border-[#17365d]/20 text-[#17365d]" onClick={() => setSummaryOpen(true)}><Users /> Yönetici Özeti</Button>
-              </div>
+              </div></div>
             </div>
           </div>
 
@@ -608,7 +608,7 @@ function MobileTaskCard({ task, childCount, selected, onSelectedChange, onOpen, 
         <div><p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Bitiş tarihi</p><p className={`text-sm font-semibold ${state === "overdue" ? "text-red-700" : state === "soon" ? "text-amber-700" : "text-slate-700"}`}>{formatDate(task.dueDate)}</p>{days !== null && !isClosed(task) && <p className="mt-1 text-xs text-slate-500">{days < 0 ? `${Math.abs(days)} gün gecikti` : days === 0 ? "Bugün" : `${days} gün kaldı`}</p>}</div>
       </div>
       <button className="mt-4 block w-full rounded-xl bg-slate-50 p-3 text-left" onClick={onOpen}><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sonraki net aksiyon</p><p className="mt-1.5 text-sm leading-6 text-slate-700">{task.nextAction || "Belirlenmedi"}</p><p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#2f5597]"><History className="size-3.5" /> Geçmişi ve alt işleri aç</p></button>
-      <div className="mt-4 flex flex-wrap justify-end border-t border-slate-100 pt-3"><Button size="sm" variant={task.managementAgenda ? "secondary" : "ghost"} onClick={onAgenda}><Star className={task.managementAgenda ? "fill-current" : ""} /> {task.managementAgenda ? "Gündemden Çıkar" : "Gündeme Ekle"}</Button>{!isClosed(task) && <><Button size="sm" variant="ghost" disabled={!canMoveUp} onClick={onMoveUp}><ArrowUp /> Yukarı</Button><Button size="sm" variant="ghost" disabled={!canMoveDown} onClick={onMoveDown}><ArrowDown /> Aşağı</Button></>}<Button size="sm" variant="ghost" className="text-slate-500" onClick={onEdit}><Edit3 /> Düzenle</Button><Button size="sm" variant="ghost" className="text-red-600" onClick={onDelete}><Trash2 /> Sil</Button></div>
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3"><Button size="sm" variant={task.managementAgenda ? "secondary" : "outline"} onClick={onAgenda}><Star className={task.managementAgenda ? "fill-current" : ""} /> {task.managementAgenda ? "Gündemden çıkar" : "Gündeme ekle"}</Button><div className="flex items-center">{!isClosed(task) && <><Button size="icon-sm" variant="ghost" disabled={!canMoveUp} onClick={onMoveUp} aria-label="Yukarı taşı"><ArrowUp /></Button><Button size="icon-sm" variant="ghost" disabled={!canMoveDown} onClick={onMoveDown} aria-label="Aşağı taşı"><ArrowDown /></Button></>}<Button size="icon-sm" variant="ghost" className="text-slate-500" onClick={onEdit} aria-label="Düzenle"><Edit3 /></Button><Button size="icon-sm" variant="ghost" className="text-red-600" onClick={onDelete} aria-label="Sil"><Trash2 /></Button></div></div>
     </article>
   );
 }

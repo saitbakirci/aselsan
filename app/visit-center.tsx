@@ -130,8 +130,8 @@ export function VisitCenter() {
         <DialogHeader><DialogTitle>Ziyaret Listesi</DialogTitle><DialogDescription>Kurum ve kişi ziyaretlerini kısa, tarihli ve sonuç odaklı takip edin.</DialogDescription></DialogHeader>
         <div className="flex flex-col gap-3 border-y border-slate-200 py-4 md:flex-row md:items-center md:justify-between">
           <div className="relative min-w-0 flex-1 md:max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Kurum, kişi veya kategori ara" className="pl-9" /></div>
-          <div className="flex flex-wrap gap-2">
-            <Select value={view} onValueChange={(value) => setView(value as typeof view)}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="planned">Planlananlar</SelectItem><SelectItem value="visited">Ziyaret edilenler</SelectItem><SelectItem value="all">Tüm ziyaretler</SelectItem></SelectContent></Select>
+          <div className="grid grid-cols-2 gap-2 md:flex">
+            <Select value={view} onValueChange={(value) => setView(value as typeof view)}><SelectTrigger className="w-full md:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="planned">Planlananlar</SelectItem><SelectItem value="visited">Ziyaret edilenler</SelectItem><SelectItem value="all">Tüm ziyaretler</SelectItem></SelectContent></Select>
             <Button className="bg-[#17365d]" onClick={openNew}><Plus /> Yeni Ziyaret</Button>
           </div>
         </div>
