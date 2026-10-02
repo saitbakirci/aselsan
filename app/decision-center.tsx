@@ -46,9 +46,6 @@ export function DecisionCenter({ onOpenTask }: { onOpenTask: (taskId: string) =>
     const pendingTasks: DecisionItem[] = data.tasks
       .filter((task) => task.managementAgenda && !closedTaskStatuses.has(task.status))
       .map((task) => ({ id: "task-" + task.id, taskId: task.id, state: "Bekleyen", title: task.title, detail: task.decision || task.nextAction || "Gündem açıklaması henüz girilmedi.", source: task.taskType === "subtask" ? "Alt İş" : task.taskType === "operational" ? "Takip İşi" : "Hedef / Proje", date: task.dueDate, priority: task.priority }));
-    const pendingApprovals: DecisionItem[] = data.approvals
-      .filter((approval) => !resolvedApprovalStatuses.has(approval.status))
-      .map((approval) => ({ id: "approval-" + approval.id, state: "Bekleyen", title: approval.title, detail: approval.decisionNote || `${approval.requestType} talebi için yönetici kararı bekleniyor.`, source: "Departman Onayı", date: approval.neededBy, priority: approval.priority }));
     const resolvedApprovals: DecisionItem[] = data.approvals
       .filter((approval) => resolvedApprovalStatuses.has(approval.status) && approval.decisionNote.trim())
       .map((approval) => ({ id: "approval-resolved-" + approval.id, state: "Alınan", title: approval.title, detail: approval.decisionNote, source: `Departman Onayı · ${approval.status}`, date: approval.neededBy, priority: approval.priority }));
@@ -56,7 +53,7 @@ export function DecisionCenter({ onOpenTask }: { onOpenTask: (taskId: string) =>
       id: "memory-" + decision.id, taskId: decision.taskId, state: "Alınan", title: decision.title,
       detail: decision.detail, source: "İş Hafızası", date: decision.eventDate, priority: "Sonuç",
     }));
-    return [...pendingTasks, ...pendingApprovals, ...resolvedApprovals, ...recordedDecisions];
+    return [...pendingTasks, ...resolvedApprovals, ...recordedDecisions];
   }, [data]);
 
   const visible = items.filter((item) => (view === "pending" ? item.state === "Bekleyen" : item.state === "Alınan"))
@@ -69,7 +66,7 @@ export function DecisionCenter({ onOpenTask }: { onOpenTask: (taskId: string) =>
     </Button>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
-        <DialogHeader><DialogTitle>Gündem Maddeleri</DialogTitle><DialogDescription>Gündeme eklediğiniz hedefleri, alt işleri, takip işlerini ve departman taleplerini tek yerde görün.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Gündem Maddeleri</DialogTitle><DialogDescription>Yalnızca sizin “Gündeme Ekle” dediğiniz hedef, alt iş ve takip işleri açık gündemde görünür.</DialogDescription></DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => setView("pending")} className={`rounded-xl border p-4 text-left ${view === "pending" ? "border-amber-400 bg-amber-50 ring-2 ring-amber-100" : "border-slate-200"}`}><BadgeCheck className="size-5 text-amber-700" /><p className="mt-2 text-sm text-slate-500">Açık gündem</p><p className="text-2xl font-bold text-slate-950">{pendingCount}</p></button>
           <button onClick={() => setView("resolved")} className={`rounded-xl border p-4 text-left ${view === "resolved" ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100" : "border-slate-200"}`}><FileCheck2 className="size-5 text-emerald-700" /><p className="mt-2 text-sm text-slate-500">Geçmiş sonuç</p><p className="text-2xl font-bold text-slate-950">{items.filter((item) => item.state === "Alınan").length}</p></button>

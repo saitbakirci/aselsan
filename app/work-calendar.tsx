@@ -42,6 +42,14 @@ export type WorkloadSummary = {
   totalPlannedMinutes: number;
   totalLoggedMinutes: number;
   remainingMinutes: number;
+  categoryBreakdown: Array<{
+    category: string;
+    taskCount: number;
+    plannedMinutes: number;
+    loggedMinutes: number;
+    remainingMinutes: number;
+    sharePercent: number;
+  }>;
   totalOpenRecords: number;
   goals: number;
   subtasks: number;
@@ -274,34 +282,51 @@ export function WorkCalendar({ open, onOpenChange, tasks, workload, workloadLoad
 }
 
 function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | null; loading: boolean }) {
-  const remainingHours = (summary?.remainingMinutes || 0) / 60;
-  const pressure = remainingHours >= 160 ? "Çok yüksek yük" : remainingHours >= 80 ? "Yüksek yük" : remainingHours >= 40 ? "Yoğun portföy" : "Yönetilebilir yük";
-  const pressureTone = remainingHours >= 160 ? "border-red-200 bg-red-50 text-red-700" : remainingHours >= 80 ? "border-amber-200 bg-amber-50 text-amber-800" : remainingHours >= 40 ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const capacityPercent = summary?.capacityPercent || 0;
+  const pressure = capacityPercent >= 400 ? "Çok yüksek toplam yük" : capacityPercent >= 200 ? "Yüksek toplam yük" : capacityPercent >= 100 ? "Tam kapasite üzeri" : "Yönetilebilir yük";
+  const pressureTone = capacityPercent >= 400 ? "border-red-200 bg-red-50 text-red-700" : capacityPercent >= 200 ? "border-amber-200 bg-amber-50 text-amber-800" : capacityPercent >= 100 ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const categoryMaximum = Math.max(1, ...(summary?.categoryBreakdown || []).map((item) => item.remainingMinutes));
 
   return <section className="shrink-0 border-b border-[#17365d]/15 bg-[#edf2f8] px-3 py-3 sm:px-6">
-    <div className="mx-auto grid max-w-[1450px] gap-3 rounded-2xl border border-[#17365d]/15 bg-white p-3 shadow-sm sm:p-4 xl:grid-cols-[minmax(250px,.85fr)_minmax(310px,.85fr)_minmax(520px,1.55fr)] xl:items-center">
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#e8eef6] text-[#17365d]"><Gauge className="size-5" /></span>
-        <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-slate-950">Toplam İş Yükü</h3><span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${pressureTone}`}>{loading ? "Hesaplanıyor" : pressure}</span></div><p className="mt-1 text-xs leading-5 text-slate-500">Tüm açık portföy · günlük veya haftalık değil</p></div>
-      </div>
-
-      <div className="grid grid-cols-3 divide-x divide-slate-200 rounded-xl border border-slate-200 bg-slate-50">
-        <WorkloadMetric label="Kalan efor" value={loading || !summary ? "—" : formatEffort(summary.remainingMinutes)} accent />
-        <WorkloadMetric label="Çalışma haftası" value={loading || !summary ? "—" : summary.peopleEquivalent.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} icon={<Scale />} />
-        <WorkloadMetric label="Kaydedilen" value={loading || !summary ? "—" : formatEffort(summary.totalLoggedMinutes)} />
-      </div>
-
-      <div className="min-w-0">
-        <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
-          <WorkloadPart label="Hedef" value={summary?.goals} />
-          <WorkloadPart label="Alt iş" value={summary?.subtasks} />
-          <WorkloadPart label="Takip işi" value={summary?.operational} />
-          <WorkloadPart label="Açık onay" value={summary?.approvals} />
-          <WorkloadPart label="Ziyaret" value={summary?.visits} />
-          <span className="flex shrink-0 items-center rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-700">{summary?.critical ?? "—"} kritik</span>
-          <span className="flex shrink-0 items-center rounded-xl bg-amber-50 px-3 text-xs font-semibold text-amber-800">{summary?.overdue ?? "—"} geciken</span>
+    <div className="mx-auto max-w-[1450px] rounded-2xl border border-[#17365d]/15 bg-white p-3 shadow-sm sm:p-4">
+      <div className="grid gap-3 xl:grid-cols-[minmax(230px,.65fr)_minmax(520px,1.45fr)_minmax(450px,1.15fr)] xl:items-center">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#e8eef6] text-[#17365d]"><Gauge className="size-5" /></span>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-slate-950">Toplam İş Yükü</h3><span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${pressureTone}`}>{loading ? "Hesaplanıyor" : pressure}</span></div><p className="mt-1 text-xs leading-5 text-slate-500">Tüm açık portföy · aylık 160 saatlik tek kişi kapasitesi</p></div>
         </div>
-        <p className="mt-1.5 hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex"><BriefcaseBusiness className="size-3.5" /> Tahmini aktif efor eksi gün gün kaydedilen çalışma süresi; onaylar bu saat hesabına katılmaz.</p>
+
+        <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 sm:grid-cols-4 sm:divide-y-0">
+          <WorkloadMetric label="Kapasite yükü" value={loading || !summary ? "—" : `%${summary.capacityPercent.toLocaleString("tr-TR")}`} accent />
+          <WorkloadMetric label="Kişi eşdeğeri" value={loading || !summary ? "—" : `${summary.peopleEquivalent.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kişi`} icon={<Scale />} />
+          <WorkloadMetric label="Kalan aktif efor" value={loading || !summary ? "—" : formatEffort(summary.remainingMinutes)} />
+          <WorkloadMetric label="Kaydedilen" value={loading || !summary ? "—" : formatEffort(summary.totalLoggedMinutes)} />
+        </div>
+
+        <div className="min-w-0">
+          <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
+            <WorkloadPart label="Hedef" value={summary?.goals} />
+            <WorkloadPart label="Alt iş" value={summary?.subtasks} />
+            <WorkloadPart label="Takip işi" value={summary?.operational} />
+            <WorkloadPart label="Açık onay" value={summary?.approvals} />
+            <WorkloadPart label="Ziyaret" value={summary?.visits} />
+            <span className="flex shrink-0 items-center rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-700">{summary?.critical ?? "—"} kritik</span>
+            <span className="flex shrink-0 items-center rounded-xl bg-amber-50 px-3 text-xs font-semibold text-amber-800">{summary?.overdue ?? "—"} geciken</span>
+          </div>
+          <p className="mt-1.5 hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex"><BriefcaseBusiness className="size-3.5" /> Kalan aktif efor, tahmini çalışma süresinden gün gün kaydedilen süre çıkarılarak hesaplanır; teslim tarihine kalan gün değildir.</p>
+        </div>
+      </div>
+
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-slate-900">Kategori yoğunluğu</p><p className="text-[11px] text-slate-500">Açık işlerin kalan aktif efor içindeki payı</p></div><Badge variant="outline">{summary?.categoryBreakdown?.length || 0} kategori</Badge></div>
+        <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
+          {(summary?.categoryBreakdown || []).map((item) => <div key={item.category} className="min-w-[165px] max-w-[190px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <p className="truncate text-xs font-semibold text-slate-700" title={item.category}>{item.category}</p>
+            <div className="mt-1 flex items-end justify-between gap-2"><span className="text-base font-bold text-[#17365d]">{formatEffort(item.remainingMinutes)}</span><span className="text-[11px] font-semibold text-slate-500">%{item.sharePercent}</span></div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-[#2f5597]" style={{ width: `${Math.max(4, Math.round(item.remainingMinutes / categoryMaximum * 100))}%` }} /></div>
+            <p className="mt-1.5 text-[11px] text-slate-500">{item.taskCount} açık kayıt</p>
+          </div>)}
+          {!loading && (summary?.categoryBreakdown?.length || 0) === 0 && <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">Açık iş kategorisi bulunmuyor.</p>}
+        </div>
       </div>
     </div>
   </section>;

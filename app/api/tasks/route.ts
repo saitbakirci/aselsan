@@ -8,6 +8,7 @@ import { memoryCatalog } from "./memory-catalog";
 const priorities = ["Kritik", "Yüksek", "Orta", "Düşük"] as const;
 const CATALOG_VERSION = "2026-09-22-v5-calendar-brand";
 const PLANNING_VERSION = "2026-10-02-v1-category-effort";
+const AGENDA_RESET_VERSION = "2026-10-02-v1-user-selected-agenda";
 const taskTypes = ["goal", "subtask", "operational"] as const;
 const workspaces = ["aselsan", "mtal"] as const;
 const statuses = [
@@ -586,10 +587,50 @@ async function syncPlanningMetadata(request: Request) {
   `).bind("task_planning_version", PLANNING_VERSION, now).run();
 }
 
+async function resetAgendaOnce(request: Request) {
+  const d1 = getD1();
+  const state = await d1
+    .prepare("SELECT value FROM app_state WHERE key = ?")
+    .bind("agenda_reset_version")
+    .first<{ value: string }>();
+  if (state?.value === AGENDA_RESET_VERSION) return;
+
+  const db = getDb();
+  const currentRows = (await db.select().from(tasks).limit(1000)).filter((task) => task.managementAgenda);
+  const by = actor(request);
+  const now = new Date().toISOString();
+  const safetyCopies = currentRows.map((task) => d1.prepare(`
+    INSERT OR IGNORE INTO task_history_entries (
+      id, task_id, event_type, snapshot_json, changed_by, source_ref, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    crypto.randomUUID(),
+    task.id,
+    "Gündem Sıfırlama Öncesi",
+    JSON.stringify(task),
+    by,
+    `agenda-reset:${AGENDA_RESET_VERSION}:${task.id}`,
+    now
+  ));
+  for (let index = 0; index < safetyCopies.length; index += 50) {
+    await d1.batch(safetyCopies.slice(index, index + 50));
+  }
+
+  await d1.batch([
+    d1.prepare("UPDATE tasks SET management_agenda = 0 WHERE management_agenda <> 0"),
+    d1.prepare(`
+      INSERT INTO app_state (key, value, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).bind("agenda_reset_version", AGENDA_RESET_VERSION, now),
+  ]);
+}
+
 export async function GET(request: Request) {
   try {
     await syncCatalog(request);
     await syncPlanningMetadata(request);
+    await resetAgendaOnce(request);
     const db = getDb();
     const rows = await db.select().from(tasks).orderBy(desc(tasks.updatedAt)).limit(500);
     return Response.json({ tasks: rows, currentUser: actor(request) });
@@ -606,6 +647,7 @@ export async function POST(request: Request) {
     if (payload.action === "bootstrap" || payload.action === "sync_catalog") {
       await syncCatalog(request, payload.action === "bootstrap");
       await syncPlanningMetadata(request);
+      await resetAgendaOnce(request);
       const rows = await db.select().from(tasks).orderBy(desc(tasks.updatedAt)).limit(500);
       return Response.json({ tasks: rows, currentUser: actor(request) }, { status: 201 });
     }

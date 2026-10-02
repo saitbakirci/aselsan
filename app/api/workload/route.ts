@@ -39,7 +39,28 @@ export async function GET() {
     const totalPlannedMinutes = activeTasks.reduce((sum, task) => sum + Math.max(0, task.estimatedEffortMinutes), 0);
     const totalLoggedMinutes = activeTasks.reduce((sum, task) => sum + (actualByTask[task.id] || 0), 0);
     const remainingMinutes = activeTasks.reduce((sum, task) => sum + Math.max(0, task.estimatedEffortMinutes - (actualByTask[task.id] || 0)), 0);
-    const referenceCapacity = 40;
+    const categoryMap = new Map<string, { category: string; taskCount: number; plannedMinutes: number; loggedMinutes: number; remainingMinutes: number }>();
+    for (const task of activeTasks) {
+      const category = task.category || "Kategori belirlenmedi";
+      const current = categoryMap.get(category) || { category, taskCount: 0, plannedMinutes: 0, loggedMinutes: 0, remainingMinutes: 0 };
+      const planned = Math.max(0, task.estimatedEffortMinutes);
+      const logged = actualByTask[task.id] || 0;
+      current.taskCount += 1;
+      current.plannedMinutes += planned;
+      current.loggedMinutes += logged;
+      current.remainingMinutes += Math.max(0, planned - logged);
+      categoryMap.set(category, current);
+    }
+    const categoryBreakdown = [...categoryMap.values()]
+      .map((item) => ({
+        ...item,
+        sharePercent: remainingMinutes > 0 ? Math.round(item.remainingMinutes / remainingMinutes * 100) : 0,
+      }))
+      .sort((a, b) => b.remainingMinutes - a.remainingMinutes || b.taskCount - a.taskCount || a.category.localeCompare(b.category, "tr"));
+
+    // Yönetim kapasitesi aylık 160 saatlik tek kişi kapasitesine göre gösterilir.
+    // Böylece %950, yaklaşık 9,5 kişilik aylık iş yükü olarak aynı ölçekte okunur.
+    const referenceCapacity = 160;
     const totalScore = Math.round((remainingMinutes / 60) * 10) / 10;
     const peopleEquivalent = Math.round((remainingMinutes / (referenceCapacity * 60)) * 10) / 10;
     const capacityPercent = Math.round((remainingMinutes / (referenceCapacity * 60)) * 100);
@@ -52,6 +73,7 @@ export async function GET() {
       totalPlannedMinutes,
       totalLoggedMinutes,
       remainingMinutes,
+      categoryBreakdown,
       totalOpenRecords: activeTasks.length,
       goals,
       subtasks,
