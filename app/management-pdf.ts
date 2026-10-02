@@ -17,7 +17,21 @@ export type ManagementTaskRow = {
   decision: string;
   risk: string;
   managementAgenda: boolean;
+  estimatedDurationDays: number;
+  trackingCadenceDays: number;
+  estimatedEffortMinutes: number;
+  receivedAt: string | null;
+  completedAt: string | null;
+  effortSource: string;
   updatedAt?: string;
+};
+
+export type ManagementTimeEntryRow = {
+  id: string;
+  taskId: string;
+  workDate: string;
+  minutes: number;
+  note: string;
 };
 
 export type ManagementApprovalRow = {
@@ -57,6 +71,7 @@ export type ManagementDashboardData = {
   approvals: ManagementApprovalRow[];
   visits: ManagementVisitRow[];
   decisions: ManagementDecisionRow[];
+  timeEntries: ManagementTimeEntryRow[];
   currentUser: string;
   generatedAt: string;
 };
@@ -91,6 +106,13 @@ function typeLabel(type: ManagementTaskRow["taskType"]) {
 
 function clean(value: string | null | undefined) {
   return value?.trim() || "Belirlenmedi";
+}
+
+function formatEffort(minutes: number) {
+  const safe = Math.max(0, Math.round(minutes || 0));
+  const hours = Math.floor(safe / 60);
+  const rest = safe % 60;
+  return rest ? `${hours} sa ${rest} dk` : `${hours} sa`;
 }
 
 function splitLongWord(word: string, font: PDFFont, size: number, width: number) {
@@ -255,26 +277,38 @@ export async function createManagementPdf(data: ManagementDashboardData) {
   const managementTasks = activeTasks.filter((task) => task.managementAgenda);
   const pendingApprovals = data.approvals.filter((approval) => !closedApprovalStatuses.has(approval.status));
   const plannedVisits = data.visits.filter((visit) => visit.status === "Planlandı");
-  const pendingDecisionCount = activeTasks.filter((task) => task.decision.trim()).length + pendingApprovals.length;
+  const pendingDecisionCount = activeTasks.filter((task) => task.managementAgenda).length + pendingApprovals.length;
   const totalOpenWorkload = activeTasks.length + pendingApprovals.length + plannedVisits.length;
+  const actualByTask = data.timeEntries.reduce<Record<string, number>>((acc, entry) => {
+    acc[entry.taskId] = (acc[entry.taskId] || 0) + entry.minutes;
+    return acc;
+  }, {});
+  const plannedMinutes = activeTasks.reduce((sum, task) => sum + Math.max(0, task.estimatedEffortMinutes || 0), 0);
+  const loggedMinutes = activeTasks.reduce((sum, task) => sum + (actualByTask[task.id] || 0), 0);
+  const remainingMinutes = activeTasks.reduce((sum, task) => sum + Math.max(0, (task.estimatedEffortMinutes || 0) - (actualByTask[task.id] || 0)), 0);
 
   writer.heading("Yönetici İş Yükü ve Durum Raporu", `${formatDate(data.generatedAt)} · ${data.currentUser || "Sait Bakırcı"}`);
-  writer.text(`Bu rapor, uygulamadaki hedefleri, alt işleri, takip işlerini, departman onaylarını, ziyaretleri ve karar kayıtlarını tek dosyada birleştirir. Günlük bir oran yerine toplam açık iş yükü gösterilir: ${totalOpenWorkload} açık sorumluluk; ${activeTasks.length} aktif iş, ${pendingApprovals.length} açık departman onayı ve ${plannedVisits.length} planlı ziyaret.`, 9.5, SLATE, 14);
+  writer.text(`Bu rapor, uygulamadaki hedefleri, alt işleri, takip işlerini, departman onaylarını, ziyaretleri ve gündem kayıtlarını tek dosyada birleştirir. ${activeTasks.length} aktif iş için planlanan ${formatEffort(plannedMinutes)}, kaydedilen ${formatEffort(loggedMinutes)} ve kalan ${formatEffort(remainingMinutes)} efor bulunur. Ayrıca ${pendingApprovals.length} açık departman onayı ve ${plannedVisits.length} planlı ziyaret izlenmektedir.`, 9.5, SLATE, 14);
   writer.metrics([
-    { label: "Toplam açık iş yükü", value: totalOpenWorkload },
+    { label: "Kalan aktif efor", value: formatEffort(remainingMinutes) },
+    { label: "Planlanan efor", value: formatEffort(plannedMinutes) },
+    { label: "Kaydedilen süre", value: formatEffort(loggedMinutes) },
     { label: "Aktif iş", value: activeTasks.length },
     { label: "Kritik iş", value: activeTasks.filter((task) => task.priority === "Kritik").length },
     { label: "Geciken", value: overdueTasks.length },
-    { label: "Karar / onay", value: pendingDecisionCount },
-    { label: "Yönetim gündemi", value: managementTasks.length },
+    { label: "Gündem / onay", value: pendingDecisionCount },
+    { label: "Gündem maddesi", value: managementTasks.length },
     { label: "Departman onayı", value: pendingApprovals.length },
     { label: "Planlı ziyaret", value: plannedVisits.length },
+    { label: "Toplam açık kayıt", value: totalOpenWorkload },
   ]);
 
-  writer.section("Yönetim Gündemi ve Beklenen Kararlar", managementTasks.length + pendingApprovals.length);
+  writer.section("Gündem Maddeleri ve Departman Onayları", managementTasks.length + pendingApprovals.length);
   managementTasks.forEach((task) => writer.record(task.title, `${workspaceLabel(task)} · ${task.status} · ${task.priority} · ${clean(task.owner)}`, [
     ["Çalışma dönemi", `${formatDate(task.followUpDate)} – ${formatDate(task.dueDate)}`],
-    ["Beklenen karar / destek", task.decision],
+    ["Gündem maddesi", task.decision],
+    ["Zaman planı", `${task.estimatedDurationDays} gün · ${task.trackingCadenceDays ? `${task.trackingCadenceDays} günde bir takip` : "takip tamamlandı"}`],
+    ["Efor", `${formatEffort(task.estimatedEffortMinutes)} tahmin · ${formatEffort(actualByTask[task.id] || 0)} gerçekleşen`],
     ["Sonraki net aksiyon", task.nextAction],
     ["Risk / bağımlılık", task.risk],
   ]));
@@ -294,8 +328,11 @@ export async function createManagementPdf(data: ManagementDashboardData) {
       ["Kategori", task.category],
       ["Sorumlu / paydaş", task.owner],
       ["Çalışma dönemi", `${formatDate(task.followUpDate)} – ${formatDate(task.dueDate)}`],
+      ["İşin geliş tarihi", formatDate(task.receivedAt)],
+      ["Zaman planı", `${task.estimatedDurationDays} gün · ${task.trackingCadenceDays ? `${task.trackingCadenceDays} günde bir takip` : "takip tamamlandı"}`],
+      ["Efor", `${formatEffort(task.estimatedEffortMinutes)} tahmin · ${formatEffort(actualByTask[task.id] || 0)} gerçekleşen`],
       ["Sonraki net aksiyon", task.nextAction],
-      ["Beklenen karar / onay", task.decision],
+      ["Gündem maddesi", task.decision],
       ["Risk / bağımlılık", task.risk],
     ]));
   });
@@ -312,8 +349,8 @@ export async function createManagementPdf(data: ManagementDashboardData) {
   writer.section("Kurumsal Ziyaretler", data.visits.length);
   data.visits.forEach((visit) => writer.record(visit.title, `${visit.category} · ${visit.status} · ${visit.priority}`, [["Ziyaret tarihi", formatDate(visit.visitDate)]]));
 
-  writer.section("Karar Geçmişi", data.decisions.length);
-  data.decisions.forEach((decision) => writer.record(decision.title, `İş Hafızası · ${formatDate(decision.eventDate)}`, [["Karar", decision.detail]]));
+  writer.section("Gündem ve Karar Geçmişi", data.decisions.length);
+  data.decisions.forEach((decision) => writer.record(decision.title, `İş Hafızası · ${formatDate(decision.eventDate)}`, [["Kayıt", decision.detail]]));
 
   writer.finish();
   const bytes = await document.save();

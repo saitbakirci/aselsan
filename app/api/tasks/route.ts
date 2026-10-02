@@ -1,11 +1,13 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { getBucket, getD1, getDb } from "../../../db";
 import { taskAttachments, taskHistoryEntries, tasks } from "../../../db/schema";
+import { estimateTaskPlanning } from "../../../lib/task-planning";
 import { additionalTasks } from "./catalog";
 import { memoryCatalog } from "./memory-catalog";
 
 const priorities = ["Kritik", "Yüksek", "Orta", "Düşük"] as const;
 const CATALOG_VERSION = "2026-09-22-v5-calendar-brand";
+const PLANNING_VERSION = "2026-10-02-v1-category-effort";
 const taskTypes = ["goal", "subtask", "operational"] as const;
 const workspaces = ["aselsan", "mtal"] as const;
 const statuses = [
@@ -33,6 +35,12 @@ type TaskInput = {
   decision?: string;
   followUpDate?: string | null;
   managementAgenda?: boolean;
+  estimatedDurationDays?: number;
+  trackingCadenceDays?: number;
+  estimatedEffortMinutes?: number;
+  receivedAt?: string | null;
+  completedAt?: string | null;
+  effortSource?: string;
   risk?: string;
 };
 
@@ -230,6 +238,19 @@ function cleanDate(value: unknown) {
     : null;
 }
 
+function cleanDateTime(value: unknown) {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function cleanInteger(value: unknown, minimum: number, maximum: number) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(minimum, Math.min(maximum, Math.round(parsed)));
+}
+
 function normalized(input: TaskInput, request: Request) {
   const title = cleanText(input.title, 180);
   if (!title) throw new Error("İş / proje adı zorunludur.");
@@ -258,6 +279,22 @@ function normalized(input: TaskInput, request: Request) {
   if (followUpDate && dueDate && followUpDate > dueDate) {
     throw new Error("Bitiş tarihi başlangıç tarihinden önce olamaz.");
   }
+  const estimate = estimateTaskPlanning({
+    title,
+    category: cleanText(input.category, 80),
+    taskType,
+    priority,
+    status,
+    followUpDate,
+    dueDate,
+  });
+  const requestedDuration = cleanInteger(input.estimatedDurationDays, 0, 3650);
+  const requestedCadence = cleanInteger(input.trackingCadenceDays, 0, 365);
+  const requestedEffort = cleanInteger(input.estimatedEffortMinutes, 0, 600_000);
+  const estimatedDurationDays = requestedDuration && requestedDuration > 0 ? requestedDuration : estimate.estimatedDurationDays;
+  const trackingCadenceDays = (status === "Tamamlandı" || status === "İptal Edildi") && requestedCadence === 0 ? 0 : requestedCadence && requestedCadence > 0 ? requestedCadence : estimate.trackingCadenceDays;
+  const estimatedEffortMinutes = requestedEffort && requestedEffort > 0 ? requestedEffort : estimate.estimatedEffortMinutes;
+  const receivedAt = cleanDateTime(input.receivedAt) || (followUpDate ? new Date(`${followUpDate}T09:00:00+03:00`).toISOString() : new Date().toISOString());
 
   return {
     workspace,
@@ -265,7 +302,7 @@ function normalized(input: TaskInput, request: Request) {
     parentGoalId,
     sortOrder,
     title,
-    category: cleanText(input.category, 80),
+    category: cleanText(input.category, 80) || estimate.category,
     priority,
     status,
     dueDate,
@@ -273,7 +310,13 @@ function normalized(input: TaskInput, request: Request) {
     nextAction: cleanText(input.nextAction, 1200),
     decision: cleanText(input.decision, 1000),
     followUpDate,
-    managementAgenda: taskType === "goal" && Boolean(input.managementAgenda),
+    managementAgenda: Boolean(input.managementAgenda),
+    estimatedDurationDays,
+    trackingCadenceDays,
+    estimatedEffortMinutes,
+    receivedAt,
+    completedAt: cleanDateTime(input.completedAt),
+    effortSource: cleanText(input.effortSource, 40) || "Manuel",
     risk: cleanText(input.risk, 1200),
     updatedBy: actor(request),
     updatedAt: new Date().toISOString(),
@@ -474,9 +517,79 @@ async function syncCatalog(request: Request, force = false) {
   }
 }
 
+async function syncPlanningMetadata(request: Request) {
+  const d1 = getD1();
+  const state = await d1
+    .prepare("SELECT value FROM app_state WHERE key = ?")
+    .bind("task_planning_version")
+    .first<{ value: string }>();
+  if (state?.value === PLANNING_VERSION) return;
+
+  const db = getDb();
+  const currentRows = await db.select().from(tasks).limit(1000);
+  const by = actor(request);
+  const now = new Date().toISOString();
+
+  const safetyCopies = currentRows.map((task) => d1.prepare(`
+    INSERT OR IGNORE INTO task_history_entries (
+      id, task_id, event_type, snapshot_json, changed_by, source_ref, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    crypto.randomUUID(),
+    task.id,
+    "Kategori ve Zaman Planı Öncesi",
+    JSON.stringify(task),
+    by,
+    `planning-safety:${PLANNING_VERSION}:${task.id}`,
+    now
+  ));
+  for (let index = 0; index < safetyCopies.length; index += 50) {
+    await d1.batch(safetyCopies.slice(index, index + 50));
+  }
+
+  const updates = currentRows.map((task) => {
+    const estimate = estimateTaskPlanning(task);
+    const receivedAt = task.receivedAt
+      || (task.followUpDate ? new Date(`${task.followUpDate}T09:00:00+03:00`).toISOString() : task.createdAt);
+    const closed = task.status === "Tamamlandı" || task.status === "İptal Edildi";
+    const completedAt = task.completedAt || (closed ? task.updatedAt : null);
+    const hasManualEstimate = task.estimatedEffortMinutes > 0;
+    return d1.prepare(`
+      UPDATE tasks SET
+        category = ?,
+        estimated_duration_days = CASE WHEN estimated_duration_days > 0 THEN estimated_duration_days ELSE ? END,
+        tracking_cadence_days = CASE WHEN tracking_cadence_days > 0 THEN tracking_cadence_days ELSE ? END,
+        estimated_effort_minutes = CASE WHEN estimated_effort_minutes > 0 THEN estimated_effort_minutes ELSE ? END,
+        received_at = COALESCE(received_at, ?),
+        completed_at = COALESCE(completed_at, ?),
+        effort_source = ?
+      WHERE id = ?
+    `).bind(
+      estimate.category,
+      estimate.estimatedDurationDays,
+      estimate.trackingCadenceDays,
+      estimate.estimatedEffortMinutes,
+      receivedAt,
+      completedAt,
+      hasManualEstimate ? (task.effortSource || "Manuel") : "Sistem Tahmini",
+      task.id
+    );
+  });
+  for (let index = 0; index < updates.length; index += 50) {
+    await d1.batch(updates.slice(index, index + 50));
+  }
+
+  await d1.prepare(`
+    INSERT INTO app_state (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).bind("task_planning_version", PLANNING_VERSION, now).run();
+}
+
 export async function GET(request: Request) {
   try {
     await syncCatalog(request);
+    await syncPlanningMetadata(request);
     const db = getDb();
     const rows = await db.select().from(tasks).orderBy(desc(tasks.updatedAt)).limit(500);
     return Response.json({ tasks: rows, currentUser: actor(request) });
@@ -492,12 +605,16 @@ export async function POST(request: Request) {
 
     if (payload.action === "bootstrap" || payload.action === "sync_catalog") {
       await syncCatalog(request, payload.action === "bootstrap");
+      await syncPlanningMetadata(request);
       const rows = await db.select().from(tasks).orderBy(desc(tasks.updatedAt)).limit(500);
       return Response.json({ tasks: rows, currentUser: actor(request) }, { status: 201 });
     }
 
     const id = crypto.randomUUID();
     const values = normalized(payload, request);
+    if ((values.status === "Tamamlandı" || values.status === "İptal Edildi") && !values.completedAt) {
+      values.completedAt = values.updatedAt;
+    }
     await assertValidParentGoal(values.taskType, values.parentGoalId);
     const [task] = await db.insert(tasks).values({ id, ...values }).returning();
     if (values.parentGoalId) {
@@ -542,11 +659,15 @@ export async function PATCH(request: Request) {
     }
     const id = cleanText(payload.id, 100);
     if (!id) return Response.json({ error: "Görev kimliği zorunludur." }, { status: 400 });
-    const values = normalized(payload, request);
     const db = getDb();
-    await assertValidParentGoal(values.taskType, values.parentGoalId);
     const [current] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
     if (!current) return Response.json({ error: "Görev bulunamadı." }, { status: 404 });
+    const values = normalized({ ...current, ...payload }, request);
+    const wasClosed = current.status === "Tamamlandı" || current.status === "İptal Edildi";
+    const isNowClosed = values.status === "Tamamlandı" || values.status === "İptal Edildi";
+    if (isNowClosed && !wasClosed) values.completedAt = values.updatedAt;
+    if (!isNowClosed && wasClosed) values.completedAt = null;
+    await assertValidParentGoal(values.taskType, values.parentGoalId);
     await db.insert(taskHistoryEntries).values({
       id: crypto.randomUUID(),
       taskId: id,

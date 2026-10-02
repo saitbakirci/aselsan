@@ -19,12 +19,36 @@ export const tasks = sqliteTable("tasks", {
   managementAgenda: integer("management_agenda", { mode: "boolean" })
     .notNull()
     .default(false),
+  estimatedDurationDays: integer("estimated_duration_days").notNull().default(0),
+  trackingCadenceDays: integer("tracking_cadence_days").notNull().default(0),
+  estimatedEffortMinutes: integer("estimated_effort_minutes").notNull().default(0),
+  receivedAt: text("received_at"),
+  completedAt: text("completed_at"),
+  effortSource: text("effort_source").notNull().default("Sistem Tahmini"),
   risk: text("risk").notNull().default(""),
   updatedBy: text("updated_by").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index("idx_tasks_parent_goal").on(table.parentGoalId),
+]);
+
+export const taskTimeEntries = sqliteTable("task_time_entries", {
+  id: text("id").primaryKey(),
+  taskId: text("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  workDate: text("work_date").notNull(),
+  minutes: integer("minutes").notNull(),
+  note: text("note").notNull().default(""),
+  entryType: text("entry_type").notNull().default("Çalışma"),
+  createdBy: text("created_by").notNull().default(""),
+  updatedBy: text("updated_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("idx_task_time_task_date").on(table.taskId, table.workDate),
+  index("idx_task_time_date").on(table.workDate),
 ]);
 
 export const taskMemoryEntries = sqliteTable("task_memory_entries", {

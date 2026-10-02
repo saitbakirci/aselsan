@@ -5,7 +5,7 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Ban, Building2, CalendarClock, CalendarDays, CheckCircle2,
   ChevronLeft, ChevronRight, CircleDot, ClipboardList, Download, Edit3,
   ExternalLink, FileText, Filter, History, Layers3, Loader2, Plus,
-  RefreshCw, Search, ShieldCheck, Smartphone, Target, Trash2, Users,
+  RefreshCw, Search, ShieldCheck, Smartphone, Star, Target, Trash2, Users,
   PauseCircle, Workflow, ListChecks, GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,11 +24,14 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Toaster } from "@/components/ui/sonner";
+import { estimateTaskPlanning, formatEffort, TASK_CATEGORIES } from "@/lib/task-planning";
 import { DepartmentApprovals } from "./department-approvals";
 import { DecisionCenter } from "./decision-center";
 import { ManagementDashboard } from "./management-dashboard";
 import { MeetingCenter, type MeetingCenterHandle } from "./meeting-center";
 import { TaskAttachments } from "./task-attachments";
+import { TaskTimePanel } from "./task-time-panel";
+import { TrackingCenter } from "./tracking-center";
 import { VisitCenter } from "./visit-center";
 import { WorkCalendar, type WorkloadSummary } from "./work-calendar";
 
@@ -42,6 +45,8 @@ type Task = {
   title: string; category: string; priority: Priority; status: Status;
   dueDate: string | null; owner: string; nextAction: string; decision: string;
   followUpDate: string | null; managementAgenda: boolean; risk: string;
+  estimatedDurationDays: number; trackingCadenceDays: number; estimatedEffortMinutes: number;
+  receivedAt: string | null; completedAt: string | null; effortSource: string;
   updatedBy: string; createdAt: string; updatedAt: string;
 };
 
@@ -65,7 +70,8 @@ const memoryKinds: MemoryKind[] = ["İlerleme", "Karar", "Yöntem", "Plan", "Dok
 const priorityRank: Record<Priority, number> = { Kritik: 0, Yüksek: 1, Orta: 2, Düşük: 3 };
 
 function makeTaskDraft(taskType: TaskType = "goal", parentGoalId: string | null = null, workspace: "aselsan" | "mtal" = "aselsan"): TaskDraft {
-  return { workspace, taskType, parentGoalId, sortOrder: 0, title: "", category: "", priority: "Orta", status: "Başlamadı", dueDate: null, owner: "Sait Bakırcı", nextAction: "", decision: "", followUpDate: null, managementAgenda: false, risk: "" };
+  const estimate = estimateTaskPlanning({ title: "Yeni iş", taskType, priority: "Orta", status: "Başlamadı" });
+  return { workspace, taskType, parentGoalId, sortOrder: 0, title: "", category: estimate.category, priority: "Orta", status: "Başlamadı", dueDate: null, owner: "Sait Bakırcı", nextAction: "", decision: "", followUpDate: null, managementAgenda: false, estimatedDurationDays: estimate.estimatedDurationDays, trackingCadenceDays: estimate.trackingCadenceDays, estimatedEffortMinutes: estimate.estimatedEffortMinutes, receivedAt: new Date().toISOString(), completedAt: null, effortSource: "Sistem Tahmini", risk: "" };
 }
 
 function localDateKey(date = new Date()) {
@@ -233,6 +239,7 @@ export default function Home() {
   const operationalTasks = useMemo(() => tasks.filter((task) => task.taskType === "operational"), [tasks]);
   const workspaceSubtasks = useMemo(() => subtasks.filter((task) => taskWorkspace(task) === workspace || workspaceGoals.some((goal) => goal.id === task.parentGoalId)), [subtasks, workspace, workspaceGoals]);
   const workspaceOperationalTasks = useMemo(() => operationalTasks.filter((task) => taskWorkspace(task) === workspace), [operationalTasks, workspace]);
+  const workspaceAllTasks = useMemo(() => [...workspaceGoals, ...workspaceSubtasks, ...workspaceOperationalTasks], [workspaceGoals, workspaceSubtasks, workspaceOperationalTasks]);
   const activeTasks = useMemo(() => workspaceGoals.filter((task) => !isClosed(task)), [workspaceGoals]);
   const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedTaskId) || null, [tasks, selectedTaskId]);
   const selectedParent = useMemo(() => selectedTask?.parentGoalId ? tasks.find((task) => task.id === selectedTask.parentGoalId) || null : null, [tasks, selectedTask]);
@@ -244,10 +251,10 @@ export default function Home() {
     waiting: activeTasks.filter((task) => task.status === "Beklemede").length,
     approvals: activeTasks.filter((task) => task.status === "Onay Bekliyor").length,
     overdue: activeTasks.filter((task) => dueState(task) === "overdue").length,
-    management: activeTasks.filter((task) => task.managementAgenda).length,
+    management: workspaceAllTasks.filter((task) => task.managementAgenda && !isClosed(task)).length,
     completed: workspaceGoals.filter((task) => task.status === "Tamamlandı").length,
     cancelled: workspaceGoals.filter((task) => task.status === "İptal Edildi").length,
-  }), [activeTasks, workspaceGoals]);
+  }), [activeTasks, workspaceGoals, workspaceAllTasks]);
 
   const visibleTasks = useMemo(() => {
     const today = localDateKey();
@@ -324,7 +331,7 @@ export default function Home() {
 
   function openEdit(task: Task) {
     setEditingId(task.id);
-    setDraft({ workspace: taskWorkspace(task), taskType: task.taskType || "goal", parentGoalId: task.parentGoalId, sortOrder: task.sortOrder || 0, title: task.title, category: task.category, priority: task.priority, status: task.status, dueDate: task.dueDate, owner: task.owner, nextAction: task.nextAction, decision: task.decision, followUpDate: task.followUpDate, managementAgenda: task.managementAgenda, risk: task.risk });
+    setDraft({ workspace: taskWorkspace(task), taskType: task.taskType || "goal", parentGoalId: task.parentGoalId, sortOrder: task.sortOrder || 0, title: task.title, category: task.category, priority: task.priority, status: task.status, dueDate: task.dueDate, owner: task.owner, nextAction: task.nextAction, decision: task.decision, followUpDate: task.followUpDate, managementAgenda: task.managementAgenda, estimatedDurationDays: task.estimatedDurationDays || 0, trackingCadenceDays: task.trackingCadenceDays || 0, estimatedEffortMinutes: task.estimatedEffortMinutes || 0, receivedAt: task.receivedAt, completedAt: task.completedAt, effortSource: task.effortSource || "Sistem Tahmini", risk: task.risk });
     setDetailOpen(false);
     setOperationalOpen(false);
     setEditorOpen(true);
@@ -343,9 +350,12 @@ export default function Home() {
       toast.error("Bitiş tarihi başlangıç tarihinden önce olamaz.");
       return;
     }
+    const plannedDraft = draft.effortSource === "Sistem Tahmini"
+      ? { ...draft, ...estimateTaskPlanning(draft), effortSource: "Sistem Tahmini" }
+      : draft;
     setSaving(true);
     try {
-      const data = await requestJson<TaskResponse>("/api/tasks", { method: editingId ? "PATCH" : "POST", body: JSON.stringify(editingId ? { id: editingId, ...draft } : draft) });
+      const data = await requestJson<TaskResponse>("/api/tasks", { method: editingId ? "PATCH" : "POST", body: JSON.stringify(editingId ? { id: editingId, ...plannedDraft } : plannedDraft) });
       setTasks((current) => editingId ? current.map((task) => task.id === editingId ? data.task : task) : [data.task, ...current]);
       setEditorOpen(false);
       if (draft.taskType === "subtask" && draft.parentGoalId) {
@@ -369,6 +379,19 @@ export default function Home() {
       toast.success("Durum güncellendi.");
       void loadWorkload(true);
     } catch (error) { setTasks(previous); toast.error(error instanceof Error ? error.message : "Durum güncellenemedi."); }
+  }
+
+  async function toggleAgenda(task: Task, enabled = !task.managementAgenda) {
+    const previous = tasks;
+    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, managementAgenda: enabled } : item));
+    try {
+      const data = await requestJson<TaskResponse>("/api/tasks", { method: "PATCH", body: JSON.stringify({ ...task, managementAgenda: enabled }) });
+      setTasks((current) => current.map((item) => item.id === task.id ? data.task : item));
+      toast.success(enabled ? "Gündem maddesine eklendi." : "Gündem maddesinden çıkarıldı.");
+    } catch (error) {
+      setTasks(previous);
+      toast.error(error instanceof Error ? error.message : "Gündem güncellenemedi.");
+    }
   }
 
   async function deleteTask() {
@@ -420,8 +443,8 @@ export default function Home() {
     finally { setMemoryDeleteId(null); }
   }
 
-  const managementTasks = activeTasks.filter((task) => task.managementAgenda);
-  const managementText = managementTasks.map((task, index) => `${index + 1}. ${task.title}\nDurum: ${task.status} | Öncelik: ${task.priority}${task.dueDate ? ` | Bitiş: ${formatDate(task.dueDate)}` : " | Bitiş tarihi belirlenmeli"}\nSonraki adım: ${task.nextAction}${task.decision ? `\nBeklenen karar: ${task.decision}` : ""}`).join("\n\n");
+  const managementTasks = workspaceAllTasks.filter((task) => task.managementAgenda && !isClosed(task));
+  const managementText = managementTasks.map((task, index) => `${index + 1}. ${task.title}\nTür: ${task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"} | Durum: ${task.status} | Öncelik: ${task.priority}${task.dueDate ? ` | Bitiş: ${formatDate(task.dueDate)}` : " | Bitiş tarihi belirlenmeli"}\nSonraki adım: ${task.nextAction}${task.decision ? `\nGündem maddesi: ${task.decision}` : ""}`).join("\n\n");
   const selectedVisibleCount = visibleTasks.filter((task) => selectedGoalSet.has(task.id)).length;
   const visibleSelectionState: boolean | "indeterminate" = visibleTasks.length > 0 && selectedVisibleCount === visibleTasks.length ? true : selectedVisibleCount > 0 ? "indeterminate" : false;
   async function copySummary() { await navigator.clipboard.writeText(`Güncel yönetim gündemi\n\n${managementText}`); toast.success("Yönetim özeti kopyalandı."); }
@@ -507,11 +530,11 @@ export default function Home() {
             <>
               <div className="hidden xl:block">
                 <Table>
-                  <TableHeader className="bg-[#17365d]"><TableRow className="border-[#17365d] hover:bg-[#17365d]"><TableHead className="w-12 pl-5 text-white"><Checkbox checked={visibleSelectionState} onCheckedChange={(checked) => toggleVisibleSelection(checked === true)} className="border-white/70 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#17365d]" aria-label="Görünen hedeflerin tümünü seç" /></TableHead><TableHead className="w-[29%] px-3 text-white">Hedef / Proje</TableHead><TableHead className="text-white">Öncelik</TableHead><TableHead className="w-44 text-white">Durum</TableHead><TableHead className="text-white">Bitiş tarihi</TableHead><TableHead className="w-[29%] text-white">Sonraki net aksiyon</TableHead><TableHead className="text-center text-white">Yönetim</TableHead><TableHead className="w-20 text-white"><span className="sr-only">İşlemler</span></TableHead></TableRow></TableHeader>
-                  <TableBody>{visibleTasks.map((task, index) => <DesktopTaskRow key={task.id} task={task} childCount={subtasks.filter((item) => item.parentGoalId === task.id).length} selected={selectedGoalSet.has(task.id)} onSelectedChange={(checked) => toggleGoalSelection(task.id, checked)} onOpen={() => openDetails(task)} onEdit={() => openEdit(task)} onDelete={() => setDeleteId(task.id)} onStatus={(status) => updateStatus(task, status)} onMoveUp={() => moveVisibleTask(index, -1)} onMoveDown={() => moveVisibleTask(index, 1)} canMoveUp={index > 0} canMoveDown={index < visibleTasks.length - 1} />)}</TableBody>
+                  <TableHeader className="bg-[#17365d]"><TableRow className="border-[#17365d] hover:bg-[#17365d]"><TableHead className="w-12 pl-5 text-white"><Checkbox checked={visibleSelectionState} onCheckedChange={(checked) => toggleVisibleSelection(checked === true)} className="border-white/70 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#17365d]" aria-label="Görünen hedeflerin tümünü seç" /></TableHead><TableHead className="w-[29%] px-3 text-white">Hedef / Proje</TableHead><TableHead className="text-white">Öncelik</TableHead><TableHead className="w-44 text-white">Durum</TableHead><TableHead className="text-white">Bitiş tarihi</TableHead><TableHead className="w-[29%] text-white">Sonraki net aksiyon</TableHead><TableHead className="text-center text-white">Gündem</TableHead><TableHead className="w-20 text-white"><span className="sr-only">İşlemler</span></TableHead></TableRow></TableHeader>
+                  <TableBody>{visibleTasks.map((task, index) => <DesktopTaskRow key={task.id} task={task} childCount={subtasks.filter((item) => item.parentGoalId === task.id).length} selected={selectedGoalSet.has(task.id)} onSelectedChange={(checked) => toggleGoalSelection(task.id, checked)} onOpen={() => openDetails(task)} onEdit={() => openEdit(task)} onDelete={() => setDeleteId(task.id)} onStatus={(status) => updateStatus(task, status)} onAgenda={() => toggleAgenda(task)} onMoveUp={() => moveVisibleTask(index, -1)} onMoveDown={() => moveVisibleTask(index, 1)} canMoveUp={index > 0} canMoveDown={index < visibleTasks.length - 1} />)}</TableBody>
                 </Table>
               </div>
-              <div className="space-y-4 bg-slate-100/70 p-3 sm:p-4 xl:hidden">{visibleTasks.map((task, index) => <MobileTaskCard key={task.id} task={task} childCount={subtasks.filter((item) => item.parentGoalId === task.id).length} selected={selectedGoalSet.has(task.id)} onSelectedChange={(checked) => toggleGoalSelection(task.id, checked)} onOpen={() => openDetails(task)} onEdit={() => openEdit(task)} onDelete={() => setDeleteId(task.id)} onStatus={(status) => updateStatus(task, status)} onMoveUp={() => moveVisibleTask(index, -1)} onMoveDown={() => moveVisibleTask(index, 1)} canMoveUp={index > 0} canMoveDown={index < visibleTasks.length - 1} />)}</div>
+              <div className="space-y-4 bg-slate-100/70 p-3 sm:p-4 xl:hidden">{visibleTasks.map((task, index) => <MobileTaskCard key={task.id} task={task} childCount={subtasks.filter((item) => item.parentGoalId === task.id).length} selected={selectedGoalSet.has(task.id)} onSelectedChange={(checked) => toggleGoalSelection(task.id, checked)} onOpen={() => openDetails(task)} onEdit={() => openEdit(task)} onDelete={() => setDeleteId(task.id)} onStatus={(status) => updateStatus(task, status)} onAgenda={() => toggleAgenda(task)} onMoveUp={() => moveVisibleTask(index, -1)} onMoveDown={() => moveVisibleTask(index, 1)} canMoveUp={index > 0} canMoveDown={index < visibleTasks.length - 1} />)}</div>
             </>
           )}
           <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:px-5"><span>{visibleTasks.length} hedef gösteriliyor{selectedGoalIds.length > 0 ? ` · ${selectedGoalIds.length} sunum için seçildi` : ""}</span><span className="hidden sm:inline">Soldaki kutudan seçip “Sunuma Çevir” düğmesini kullanın.</span></div>
@@ -520,10 +543,10 @@ export default function Home() {
 
       <TaskEditor open={editorOpen} onOpenChange={setEditorOpen} draft={draft} setDraft={setDraft} goals={workspaceGoals} editing={Boolean(editingId)} saving={saving} onSave={saveTask} />
       <WorkCalendar open={calendarOpen} onOpenChange={setCalendarOpen} tasks={tasks} workload={workload} workloadLoading={workloadLoading} onOpenTask={(taskId, taskWorkspaceValue) => { const task = tasks.find((item) => item.id === taskId); if (task) { setWorkspace(taskWorkspaceValue); openDetails(task); } }} />
-      <GoalDetailSheet open={detailOpen} onOpenChange={setDetailOpen} task={selectedTask} parent={selectedParent} childTasks={selectedChildren} memories={memories} memoryLoading={memoryLoading} onEditTask={openEdit} onDeleteTask={(task) => setDeleteId(task.id)} onStatus={updateStatus} onAddSubtask={(goalId) => { setDetailOpen(false); openNewTask("subtask", goalId); }} onAddMemory={openNewMemory} onEditMemory={openEditMemory} onDeleteMemory={(entry) => setMemoryDeleteId(entry.id)} onOpenParent={(parentTask) => openDetails(parentTask)} />
-      <OperationalDialog open={operationalOpen} onOpenChange={setOperationalOpen} tasks={workspaceOperationalTasks} onAdd={() => { setOperationalOpen(false); openNewTask("operational"); }} onOpen={(task) => { setOperationalOpen(false); openDetails(task); }} onEdit={openEdit} onDelete={(task) => setDeleteId(task.id)} onStatus={updateStatus} onReorder={reorderTaskIds} />
+      <GoalDetailSheet open={detailOpen} onOpenChange={setDetailOpen} task={selectedTask} parent={selectedParent} childTasks={selectedChildren} memories={memories} memoryLoading={memoryLoading} onEditTask={openEdit} onDeleteTask={(task) => setDeleteId(task.id)} onStatus={updateStatus} onAgenda={toggleAgenda} onAddSubtask={(goalId) => { setDetailOpen(false); openNewTask("subtask", goalId); }} onAddMemory={openNewMemory} onEditMemory={openEditMemory} onDeleteMemory={(entry) => setMemoryDeleteId(entry.id)} onOpenParent={(parentTask) => openDetails(parentTask)} onTimeChanged={() => loadWorkload(true)} />
+      <TrackingCenter open={operationalOpen} onOpenChange={setOperationalOpen} tasks={tasks} workspace={workspace} onAddTask={() => { setOperationalOpen(false); openNewTask("operational"); }} onOpenTask={(taskId) => { const task = tasks.find((item) => item.id === taskId); if (task) { setOperationalOpen(false); openDetails(task); } }} onEditTask={(taskId) => { const task = tasks.find((item) => item.id === taskId); if (task) openEdit(task); }} onDeleteTask={(taskId) => setDeleteId(taskId)} onStatusChange={(taskId, status) => { const task = tasks.find((item) => item.id === taskId); if (task) return updateStatus(task, status); }} onAgendaChange={(taskId, enabled) => { const task = tasks.find((item) => item.id === taskId); if (task) return toggleAgenda(task, enabled); }} onTimeChanged={() => loadWorkload(true)} />
       <MemoryEditor open={memoryEditorOpen} onOpenChange={setMemoryEditorOpen} draft={memoryDraft} setDraft={setMemoryDraft} editing={Boolean(editingMemoryId)} saving={memorySaving} onSave={saveMemory} />
-      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}><DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Yönetici Özeti</DialogTitle><DialogDescription>Yönetim kararı veya desteği gerektiren açık hedefler.</DialogDescription></DialogHeader><div className="space-y-3">{managementTasks.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Açık yönetim gündemi bulunmuyor.</p> : managementTasks.map((task, index) => <button key={task.id} className="block w-full rounded-xl border border-slate-200 p-4 text-left transition hover:border-[#2f5597]/40 hover:bg-slate-50" onClick={() => { setSummaryOpen(false); openDetails(task); }}><div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17365d] text-sm font-bold text-white">{index + 1}</span><div className="min-w-0"><h3 className="font-semibold text-slate-900">{task.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{task.nextAction}</p>{task.decision && <p className="mt-2 text-sm font-medium text-[#17365d]">Karar: {task.decision}</p>}</div></div></button>)}</div><DialogFooter><Button variant="outline" onClick={copySummary}><ClipboardList /> Özeti Kopyala</Button><Button className="bg-[#17365d]" onClick={() => setSummaryOpen(false)}>Kapat</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}><DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Yönetici Özeti</DialogTitle><DialogDescription>Gündeme eklenen hedef, alt iş ve takip işlerinin tamamı.</DialogDescription></DialogHeader><div className="space-y-3">{managementTasks.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Açık gündem maddesi bulunmuyor.</p> : managementTasks.map((task, index) => <button key={task.id} className="block w-full rounded-xl border border-slate-200 p-4 text-left transition hover:border-[#2f5597]/40 hover:bg-slate-50" onClick={() => { setSummaryOpen(false); openDetails(task); }}><div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17365d] text-sm font-bold text-white">{index + 1}</span><div className="min-w-0"><div className="flex flex-wrap gap-2"><Badge variant="outline">{task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"}</Badge><Badge variant="outline">{task.category}</Badge></div><h3 className="mt-2 font-semibold text-slate-900">{task.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{task.nextAction}</p>{task.decision && <p className="mt-2 text-sm font-medium text-[#17365d]">Gündem maddesi: {task.decision}</p>}<p className="mt-2 text-xs text-slate-400">{formatEffort(task.estimatedEffortMinutes)} efor · Bitiş: {formatDate(task.dueDate)}</p></div></div></button>)}</div><DialogFooter><Button variant="outline" onClick={copySummary}><ClipboardList /> Özeti Kopyala</Button><Button className="bg-[#17365d]" onClick={() => setSummaryOpen(false)}>Kapat</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={installOpen} onOpenChange={setInstallOpen}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>iPhone’a Kurulum</DialogTitle><DialogDescription>Uygulamayı Safari üzerinden ana ekranınıza ekleyebilirsiniz.</DialogDescription></DialogHeader><ol className="space-y-3 text-sm text-slate-700"><li className="flex gap-3"><span className="install-step">1</span><span>Bu uygulamayı iPhone’da <strong>Safari</strong> ile açın.</span></li><li className="flex gap-3"><span className="install-step">2</span><span>Alt menüdeki <strong>Paylaş</strong> simgesine dokunun.</span></li><li className="flex gap-3"><span className="install-step">3</span><span><strong>Ana Ekrana Ekle</strong> seçeneğini seçip onaylayın.</span></li></ol><div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-800">Ana ekrandan açıldığında uygulama tam ekran çalışır. Telefon ve bilgisayardaki veriler aynı kayıt alanını kullanır.</div><DialogFooter><Button className="bg-[#17365d]" onClick={() => setInstallOpen(false)}><Download /> Tamam</Button></DialogFooter></DialogContent></Dialog>
       <AlertDialog open={Boolean(deleteId)} onOpenChange={(open) => !open && setDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Bu işi silmek istiyor musunuz?</AlertDialogTitle><AlertDialogDescription>İş, ortak takip ekranından kalıcı olarak kaldırılacaktır.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Vazgeç</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={deleteTask}>Sil</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <AlertDialog open={Boolean(memoryDeleteId)} onOpenChange={(open) => !open && setMemoryDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Bu hafıza kaydını silmek istiyor musunuz?</AlertDialogTitle><AlertDialogDescription>Geçmiş bilgi veya doküman kaydı kalıcı olarak kaldırılacaktır.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Vazgeç</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={deleteMemory}>Sil</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
@@ -536,7 +559,7 @@ function MetricCard({ label, value, icon, tone, active, onClick }: { label: stri
   return <button onClick={onClick} className={`group flex min-h-24 items-center justify-between rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${active ? "border-[#2f5597] ring-2 ring-[#2f5597]/10" : "border-slate-200"}`}><div><p className="text-sm font-medium leading-5 text-slate-500">{label}</p><p className="mt-1 text-3xl font-bold tracking-tight text-slate-950">{value}</p></div><span className={`grid size-9 shrink-0 place-items-center rounded-xl [&_svg]:size-4 ${colors}`}>{icon}</span></button>;
 }
 
-function DesktopTaskRow({ task, childCount, selected, onSelectedChange, onOpen, onEdit, onDelete, onStatus, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: { task: Task; childCount: number; selected: boolean; onSelectedChange: (checked: boolean) => void; onOpen: () => void; onEdit: () => void; onDelete: () => void; onStatus: (status: Status) => void; onMoveUp: () => void; onMoveDown: () => void; canMoveUp: boolean; canMoveDown: boolean }) {
+function DesktopTaskRow({ task, childCount, selected, onSelectedChange, onOpen, onEdit, onDelete, onStatus, onAgenda, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: { task: Task; childCount: number; selected: boolean; onSelectedChange: (checked: boolean) => void; onOpen: () => void; onEdit: () => void; onDelete: () => void; onStatus: (status: Status) => void; onAgenda: () => void; onMoveUp: () => void; onMoveDown: () => void; canMoveUp: boolean; canMoveDown: boolean }) {
   const state = dueState(task);
   const days = daysUntil(task.dueDate);
   return (
@@ -548,6 +571,7 @@ function DesktopTaskRow({ task, childCount, selected, onSelectedChange, onOpen, 
           <div className="min-w-0">
             <button onClick={onOpen} className="text-left font-semibold leading-5 text-slate-900 hover:text-[#2f5597]">{task.title}</button>
             <p className="mt-1 text-sm text-slate-500">{task.category} · {task.owner || "Sorumlu belirlenmedi"}</p>
+            <p className="mt-1 text-xs font-medium text-slate-400">{formatEffort(task.estimatedEffortMinutes)} efor · {task.estimatedDurationDays} gün takvim süresi</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {childCount > 0 && <Badge variant="secondary"><Layers3 /> {childCount} alt iş</Badge>}
               <span className="inline-flex items-center gap-1 text-xs font-medium text-[#2f5597]"><History className="size-3.5" /> İş hafızasını aç</span>
@@ -559,13 +583,13 @@ function DesktopTaskRow({ task, childCount, selected, onSelectedChange, onOpen, 
       <TableCell className="align-top py-4"><StatusSelect task={task} onStatus={onStatus} /></TableCell>
       <TableCell className="align-top py-4"><div className={`text-sm font-medium ${state === "overdue" ? "text-red-700" : state === "soon" ? "text-amber-700" : state === "undated" ? "text-slate-500" : "text-slate-700"}`}>{formatDate(task.dueDate)}</div>{days !== null && !isClosed(task) && <div className="mt-1 text-xs text-slate-500">{days < 0 ? `${Math.abs(days)} gün gecikti` : days === 0 ? "Bugün" : `${days} gün kaldı`}</div>}</TableCell>
       <TableCell className="whitespace-normal align-top py-4"><p className="line-clamp-3 text-sm leading-5 text-slate-700">{task.nextAction || "Sonraki aksiyon belirlenmedi."}</p></TableCell>
-      <TableCell className="text-center align-top py-4">{task.managementAgenda ? <Badge className="bg-[#17365d] text-white">Evet</Badge> : <span className="text-slate-300">—</span>}</TableCell>
+      <TableCell className="text-center align-top py-4"><Button size="icon-sm" variant={task.managementAgenda ? "default" : "outline"} className={task.managementAgenda ? "bg-[#17365d]" : ""} onClick={onAgenda} aria-label={task.managementAgenda ? "Gündem maddesinden çıkar" : "Gündem maddesine ekle"}><Star className={task.managementAgenda ? "fill-current" : ""} /></Button></TableCell>
       <TableCell className="align-top py-4"><div className="flex">{!isClosed(task) && <><Button size="icon-sm" variant="ghost" disabled={!canMoveUp} onClick={onMoveUp} aria-label="Yukarı taşı"><ArrowUp /></Button><Button size="icon-sm" variant="ghost" disabled={!canMoveDown} onClick={onMoveDown} aria-label="Aşağı taşı"><ArrowDown /></Button></>}<Button size="icon-sm" variant="ghost" onClick={onOpen} aria-label="İş hafızasını aç"><ChevronRight /></Button><Button size="icon-sm" variant="ghost" onClick={onEdit} aria-label="Düzenle"><Edit3 /></Button><Button size="icon-sm" variant="ghost" className="text-slate-400 hover:text-red-600" onClick={onDelete} aria-label="Sil"><Trash2 /></Button></div></TableCell>
     </TableRow>
   );
 }
 
-function MobileTaskCard({ task, childCount, selected, onSelectedChange, onOpen, onEdit, onDelete, onStatus, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: { task: Task; childCount: number; selected: boolean; onSelectedChange: (checked: boolean) => void; onOpen: () => void; onEdit: () => void; onDelete: () => void; onStatus: (status: Status) => void; onMoveUp: () => void; onMoveDown: () => void; canMoveUp: boolean; canMoveDown: boolean }) {
+function MobileTaskCard({ task, childCount, selected, onSelectedChange, onOpen, onEdit, onDelete, onStatus, onAgenda, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: { task: Task; childCount: number; selected: boolean; onSelectedChange: (checked: boolean) => void; onOpen: () => void; onEdit: () => void; onDelete: () => void; onStatus: (status: Status) => void; onAgenda: () => void; onMoveUp: () => void; onMoveDown: () => void; canMoveUp: boolean; canMoveDown: boolean }) {
   const state = dueState(task);
   const days = daysUntil(task.dueDate);
   return (
@@ -573,9 +597,9 @@ function MobileTaskCard({ task, childCount, selected, onSelectedChange, onOpen, 
       <div className="flex items-start justify-between gap-3">
         <Checkbox checked={selected} onCheckedChange={(checked) => onSelectedChange(checked === true)} className="mt-1 size-5 border-slate-400 data-[state=checked]:border-[#2f5597] data-[state=checked]:bg-[#2f5597]" aria-label={`${task.title} hedefini sunum için seç`} />
         <button className="min-w-0 flex-1 text-left" onClick={onOpen}>
-          <div className="flex flex-wrap gap-2"><Badge variant="outline" className={priorityClass(task.priority)}>{task.priority}</Badge>{task.managementAgenda && <Badge className="bg-[#17365d]">Yönetim</Badge>}{childCount > 0 && <Badge variant="secondary"><Layers3 /> {childCount} alt iş</Badge>}</div>
+          <div className="flex flex-wrap gap-2"><Badge variant="outline" className={priorityClass(task.priority)}>{task.priority}</Badge>{task.managementAgenda && <Badge className="bg-[#17365d]">Gündemde</Badge>}{childCount > 0 && <Badge variant="secondary"><Layers3 /> {childCount} alt iş</Badge>}</div>
           <h3 className="mt-3 text-base font-semibold leading-6 text-slate-950">{task.title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{task.category} · {task.owner || "Sorumlu belirlenmedi"}</p>
+          <p className="mt-1 text-sm text-slate-500">{task.category} · {task.owner || "Sorumlu belirlenmedi"}</p><p className="mt-1 text-xs font-medium text-slate-400">{formatEffort(task.estimatedEffortMinutes)} efor · {task.estimatedDurationDays} gün</p>
         </button>
         <Button size="icon-sm" variant="ghost" onClick={onOpen} aria-label="İş hafızasını aç"><ChevronRight /></Button>
       </div>
@@ -584,7 +608,7 @@ function MobileTaskCard({ task, childCount, selected, onSelectedChange, onOpen, 
         <div><p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Bitiş tarihi</p><p className={`text-sm font-semibold ${state === "overdue" ? "text-red-700" : state === "soon" ? "text-amber-700" : "text-slate-700"}`}>{formatDate(task.dueDate)}</p>{days !== null && !isClosed(task) && <p className="mt-1 text-xs text-slate-500">{days < 0 ? `${Math.abs(days)} gün gecikti` : days === 0 ? "Bugün" : `${days} gün kaldı`}</p>}</div>
       </div>
       <button className="mt-4 block w-full rounded-xl bg-slate-50 p-3 text-left" onClick={onOpen}><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sonraki net aksiyon</p><p className="mt-1.5 text-sm leading-6 text-slate-700">{task.nextAction || "Belirlenmedi"}</p><p className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#2f5597]"><History className="size-3.5" /> Geçmişi ve alt işleri aç</p></button>
-      <div className="mt-4 flex flex-wrap justify-end border-t border-slate-100 pt-3">{!isClosed(task) && <><Button size="sm" variant="ghost" disabled={!canMoveUp} onClick={onMoveUp}><ArrowUp /> Yukarı</Button><Button size="sm" variant="ghost" disabled={!canMoveDown} onClick={onMoveDown}><ArrowDown /> Aşağı</Button></>}<Button size="sm" variant="ghost" className="text-slate-500" onClick={onEdit}><Edit3 /> Düzenle</Button><Button size="sm" variant="ghost" className="text-red-600" onClick={onDelete}><Trash2 /> Sil</Button></div>
+      <div className="mt-4 flex flex-wrap justify-end border-t border-slate-100 pt-3"><Button size="sm" variant={task.managementAgenda ? "secondary" : "ghost"} onClick={onAgenda}><Star className={task.managementAgenda ? "fill-current" : ""} /> {task.managementAgenda ? "Gündemden Çıkar" : "Gündeme Ekle"}</Button>{!isClosed(task) && <><Button size="sm" variant="ghost" disabled={!canMoveUp} onClick={onMoveUp}><ArrowUp /> Yukarı</Button><Button size="sm" variant="ghost" disabled={!canMoveDown} onClick={onMoveDown}><ArrowDown /> Aşağı</Button></>}<Button size="sm" variant="ghost" className="text-slate-500" onClick={onEdit}><Edit3 /> Düzenle</Button><Button size="sm" variant="ghost" className="text-red-600" onClick={onDelete}><Trash2 /> Sil</Button></div>
     </article>
   );
 }
@@ -593,7 +617,7 @@ function StatusSelect({ task, onStatus, fullWidth = false }: { task: Task; onSta
   return <Select value={task.status} onValueChange={(value) => onStatus(value as Status)}><SelectTrigger className={`h-9 border text-xs font-medium shadow-none ${fullWidth ? "w-full" : "w-40"} ${statusClass(task.status)}`}><SelectValue /></SelectTrigger><SelectContent>{statuses.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>;
 }
 
-function GoalDetailSheet({ open, onOpenChange, task, parent, childTasks, memories, memoryLoading, onEditTask, onDeleteTask, onStatus, onAddSubtask, onAddMemory, onEditMemory, onDeleteMemory, onOpenParent }: { open: boolean; onOpenChange: (open: boolean) => void; task: Task | null; parent: Task | null; childTasks: Task[]; memories: MemoryEntry[]; memoryLoading: boolean; onEditTask: (task: Task) => void; onDeleteTask: (task: Task) => void; onStatus: (task: Task, status: Status) => void; onAddSubtask: (goalId: string) => void; onAddMemory: (taskId: string, kind?: MemoryKind) => void; onEditMemory: (entry: MemoryEntry) => void; onDeleteMemory: (entry: MemoryEntry) => void; onOpenParent: (task: Task) => void }) {
+function GoalDetailSheet({ open, onOpenChange, task, parent, childTasks, memories, memoryLoading, onEditTask, onDeleteTask, onStatus, onAgenda, onAddSubtask, onAddMemory, onEditMemory, onDeleteMemory, onOpenParent, onTimeChanged }: { open: boolean; onOpenChange: (open: boolean) => void; task: Task | null; parent: Task | null; childTasks: Task[]; memories: MemoryEntry[]; memoryLoading: boolean; onEditTask: (task: Task) => void; onDeleteTask: (task: Task) => void; onStatus: (task: Task, status: Status) => void; onAgenda: (task: Task, enabled?: boolean) => void; onAddSubtask: (goalId: string) => void; onAddMemory: (taskId: string, kind?: MemoryKind) => void; onEditMemory: (entry: MemoryEntry) => void; onDeleteMemory: (entry: MemoryEntry) => void; onOpenParent: (task: Task) => void; onTimeChanged: () => void }) {
   const documents = memories
     .filter((entry) => entry.kind === "Doküman")
     .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || b.eventDate.localeCompare(a.eventDate));
@@ -612,21 +636,25 @@ function GoalDetailSheet({ open, onOpenChange, task, parent, childTasks, memorie
             {parent && <button onClick={() => onOpenParent(parent)} className="mb-4 flex w-full items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-left text-sm font-medium text-blue-800"><ChevronLeft className="size-4" /> Ana hedef: {parent.title}</button>}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
               <StatusSelect task={task} onStatus={(status) => onStatus(task, status)} />
-              <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => onEditTask(task)}><Edit3 /> Düzenle</Button><Button size="sm" className="bg-[#17365d]" onClick={() => onAddMemory(task.id)}><Plus /> Gelişme Ekle</Button></div>
+              <div className="flex flex-wrap gap-2"><Button size="sm" variant={task.managementAgenda ? "secondary" : "outline"} onClick={() => onAgenda(task)}><Star className={task.managementAgenda ? "fill-current" : ""} /> {task.managementAgenda ? "Gündemden Çıkar" : "Gündem Maddesine Ekle"}</Button><Button size="sm" variant="outline" onClick={() => onEditTask(task)}><Edit3 /> Düzenle</Button><Button size="sm" className="bg-[#17365d]" onClick={() => onAddMemory(task.id)}><Plus /> Gelişme Ekle</Button></div>
             </div>
 
             <section className="grid gap-3 sm:grid-cols-2">
               <DetailCard label="Sonraki net aksiyon" value={task.nextAction || "Belirlenmedi"} />
-              <DetailCard label="Beklenen karar / onay" value={task.decision || "Karar beklenmiyor"} />
+              <DetailCard label="Gündem maddesi" value={task.decision || "Gündem açıklaması girilmedi"} />
               <DetailCard label="Çalışma dönemi" value={`Başlangıç: ${task.followUpDate ? formatDate(task.followUpDate) : "Belirlenmedi"} · Bitiş: ${task.dueDate ? formatDate(task.dueDate) : "Belirlenmedi"}`} />
               <DetailCard label="Risk / bağımlılık" value={task.risk || "Kayıtlı risk bulunmuyor"} />
+              <DetailCard label="Zaman planı" value={`${task.estimatedDurationDays} gün takvim süresi · ${task.trackingCadenceDays ? `${task.trackingCadenceDays} günde bir takip` : "takip tamamlandı"}`} />
+              <DetailCard label="Tahmini aktif efor" value={`${formatEffort(task.estimatedEffortMinutes)} · ${task.effortSource}`} />
             </section>
+
+            <div className="mt-6"><TaskTimePanel key={task.id} taskId={task.id} estimatedMinutes={task.estimatedEffortMinutes} onChanged={onTimeChanged} /></div>
 
             {task.taskType === "goal" && (
               <section className="mt-6">
                 <SectionHeading icon={<Layers3 />} title="Alt iş paketleri" description={`${childTasks.length} alt iş · Ana hedefi oluşturan somut iş adımları`} action={<Button size="sm" variant="outline" onClick={() => onAddSubtask(task.id)}><Plus /> Alt İş Ekle</Button>} />
                 <div className="mt-3 space-y-2">
-                  {childTasks.length === 0 ? <EmptyPanel text="Bu hedef için henüz alt iş tanımlanmadı." /> : childTasks.map((child) => <div key={child.id} className="rounded-xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><button className="min-w-0 flex-1 text-left" onClick={() => onOpenParent(child)}><div className="flex flex-wrap gap-2"><Badge variant="outline" className={priorityClass(child.priority)}>{child.priority}</Badge><Badge variant="outline" className={statusClass(child.status)}>{child.status}</Badge></div><h4 className="mt-2 font-semibold text-slate-900">{child.title}</h4><p className="mt-1 text-sm leading-5 text-slate-600">{child.nextAction || "Sonraki aksiyon belirlenmedi."}</p></button><div className="flex"><Button size="icon-sm" variant="ghost" onClick={() => onEditTask(child)} aria-label="Alt işi düzenle"><Edit3 /></Button><Button size="icon-sm" variant="ghost" className="text-red-600" onClick={() => onDeleteTask(child)} aria-label="Alt işi sil"><Trash2 /></Button></div></div><div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3"><span className="text-xs text-slate-500">Bitiş: {formatDate(child.dueDate)} · {child.owner || "Sorumlu belirlenmedi"}</span><StatusSelect task={child} onStatus={(status) => onStatus(child, status)} /></div></div>)}
+                  {childTasks.length === 0 ? <EmptyPanel text="Bu hedef için henüz alt iş tanımlanmadı." /> : childTasks.map((child) => <div key={child.id} className="rounded-xl border border-slate-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><button className="min-w-0 flex-1 text-left" onClick={() => onOpenParent(child)}><div className="flex flex-wrap gap-2"><Badge variant="outline" className={priorityClass(child.priority)}>{child.priority}</Badge><Badge variant="outline" className={statusClass(child.status)}>{child.status}</Badge>{child.managementAgenda && <Badge className="bg-[#17365d]">Gündemde</Badge>}</div><h4 className="mt-2 font-semibold text-slate-900">{child.title}</h4><p className="mt-1 text-sm leading-5 text-slate-600">{child.nextAction || "Sonraki aksiyon belirlenmedi."}</p><p className="mt-1 text-xs text-slate-400">{child.category} · {formatEffort(child.estimatedEffortMinutes)}</p></button><div className="flex"><Button size="icon-sm" variant={child.managementAgenda ? "secondary" : "ghost"} onClick={() => onAgenda(child)} aria-label="Gündem maddesini değiştir"><Star className={child.managementAgenda ? "fill-current" : ""} /></Button><Button size="icon-sm" variant="ghost" onClick={() => onEditTask(child)} aria-label="Alt işi düzenle"><Edit3 /></Button><Button size="icon-sm" variant="ghost" className="text-red-600" onClick={() => onDeleteTask(child)} aria-label="Alt işi sil"><Trash2 /></Button></div></div><div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3"><span className="text-xs text-slate-500">Bitiş: {formatDate(child.dueDate)} · {child.owner || "Sorumlu belirlenmedi"}</span><StatusSelect task={child} onStatus={(status) => onStatus(child, status)} /></div></div>)}
                 </div>
               </section>
             )}
@@ -685,39 +713,18 @@ function MemoryCard({ entry, onEdit, onDelete }: { entry: MemoryEntry; onEdit: (
   );
 }
 
-function OperationalDialog({ open, onOpenChange, tasks, onAdd, onOpen, onEdit, onDelete, onStatus, onReorder }: { open: boolean; onOpenChange: (open: boolean) => void; tasks: Task[]; onAdd: () => void; onOpen: (task: Task) => void; onEdit: (task: Task) => void; onDelete: (task: Task) => void; onStatus: (task: Task, status: Status) => void; onReorder: (ids: string[]) => Promise<void> }) {
-  const [query, setQuery] = useState("");
-  const matching = tasks.filter((task) => `${task.title} ${task.category} ${task.owner} ${task.nextAction}`.toLocaleLowerCase("tr-TR").includes(query.toLocaleLowerCase("tr-TR")));
-  const active = matching.filter((task) => !isClosed(task)).sort((a, b) => (a.sortOrder || Number.MAX_SAFE_INTEGER) - (b.sortOrder || Number.MAX_SAFE_INTEGER));
-  const completed = matching.filter((task) => isClosed(task));
-  async function move(index: number, direction: -1 | 1) {
-    const target = index + direction;
-    if (target < 0 || target >= active.length) return;
-    const ordered = [...active];
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    await onReorder(ordered.map((task) => task.id));
-  }
-  function taskCard(task: Task, index?: number) {
-    return <article key={task.id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><button className="min-w-0 flex-1 text-left" onClick={() => onOpen(task)}><div className="flex flex-wrap gap-2"><Badge variant="outline" className={priorityClass(task.priority)}>{task.priority}</Badge><Badge variant="outline" className={statusClass(task.status)}>{task.status}</Badge></div><h3 className="mt-2 font-semibold text-slate-950">{task.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{task.nextAction || "Sonraki aksiyon belirlenmedi."}</p><p className="mt-2 text-xs text-slate-500">{task.category || "Kategori belirlenmedi"} · Bitiş: {formatDate(task.dueDate)}</p></button><div className="flex">{index !== undefined && <><Button size="icon-sm" variant="ghost" disabled={index === 0} onClick={() => move(index, -1)} aria-label="Yukarı taşı"><ArrowUp /></Button><Button size="icon-sm" variant="ghost" disabled={index === active.length - 1} onClick={() => move(index, 1)} aria-label="Aşağı taşı"><ArrowDown /></Button></>}<Button size="icon-sm" variant="ghost" onClick={() => { onOpenChange(false); onEdit(task); }} aria-label="Düzenle"><Edit3 /></Button><Button size="icon-sm" variant="ghost" className="text-red-600" onClick={() => onDelete(task)} aria-label="Sil"><Trash2 /></Button></div></div><div className="mt-3 border-t border-slate-100 pt-3"><StatusSelect task={task} onStatus={(status) => onStatus(task, status)} /></div></article>;
-  }
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader><DialogTitle>Takip Listesi</DialogTitle><DialogDescription>Kurumsal hedef olmayan ancak zaman alan ve takip edilmesi gereken günlük işler. Hedef sayısına, yönetim gündemine ve sunuma dahil edilmez.</DialogDescription></DialogHeader>
-        <div className="flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9" placeholder="Başlık, kategori, sorumlu veya aksiyonda ara" /></div><Button className="bg-[#17365d]" onClick={onAdd}><Plus /> Takip İşi Ekle</Button></div>
-        <section><h3 className="mb-3 flex items-center justify-between font-semibold text-slate-900"><span>Devam Edenler</span><Badge variant="secondary">{active.length}</Badge></h3><div className="space-y-3">{active.length === 0 ? <EmptyPanel text="Aramaya uyan devam eden takip işi yok." /> : active.map((task, index) => taskCard(task, index))}</div></section>
-        <section><h3 className="mb-3 flex items-center justify-between font-semibold text-slate-900"><span>Tamamlananlar</span><Badge variant="secondary">{completed.length}</Badge></h3><div className="space-y-3">{completed.length === 0 ? <EmptyPanel text="Aramaya uyan tamamlanmış takip işi yok." /> : completed.map((task) => taskCard(task))}</div></section>
-        <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Kapat</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function TaskEditor({ open, onOpenChange, draft, setDraft, goals, editing, saving, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; draft: TaskDraft; setDraft: React.Dispatch<React.SetStateAction<TaskDraft>>; goals: Task[]; editing: boolean; saving: boolean; onSave: () => void }) {
   const set = <K extends keyof TaskDraft>(key: K, value: TaskDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const noun = draft.taskType === "goal" ? "Hedef" : draft.taskType === "subtask" ? "Alt İş" : "Takip İşi";
   function setRecordType(value: "goal" | "operational") {
-    setDraft((current) => ({ ...current, taskType: value, parentGoalId: null, managementAgenda: value === "goal" ? current.managementAgenda : false }));
+    setDraft((current) => {
+      const estimate = estimateTaskPlanning({ ...current, taskType: value });
+      return { ...current, taskType: value, parentGoalId: null, category: estimate.category, estimatedDurationDays: estimate.estimatedDurationDays, trackingCadenceDays: estimate.trackingCadenceDays, estimatedEffortMinutes: estimate.estimatedEffortMinutes, effortSource: "Sistem Tahmini" };
+    });
+  }
+  function recalculatePlanning() {
+    const estimate = estimateTaskPlanning(draft);
+    setDraft((current) => ({ ...current, ...estimate, effortSource: "Sistem Tahmini" }));
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -731,16 +738,25 @@ function TaskEditor({ open, onOpenChange, draft, setDraft, goals, editing, savin
           <Field label="Çalışma alanı" className="sm:col-span-2"><Select value={draft.workspace} onValueChange={(value) => set("workspace", value as "aselsan" | "mtal")}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="aselsan">Aselsan Konya</SelectItem><SelectItem value="mtal">Aselsan Konya MTAL</SelectItem></SelectContent></Select></Field>
           {draft.taskType === "subtask" && <Field label="Bağlı ana hedef" className="sm:col-span-2"><Select value={draft.parentGoalId || ""} onValueChange={(value) => set("parentGoalId", value)}><SelectTrigger className="w-full"><SelectValue placeholder="Ana hedef seçin" /></SelectTrigger><SelectContent>{goals.map((goal) => <SelectItem key={goal.id} value={goal.id}>{goal.title}</SelectItem>)}</SelectContent></Select></Field>}
           <Field label={`${noun} adı`} className="sm:col-span-2"><Input value={draft.title} onChange={(event) => set("title", event.target.value)} placeholder={draft.taskType === "subtask" ? "Örn. Konaklama planının tamamlanması" : draft.taskType === "operational" ? "Örn. Ofis yerleşim düzenlemesi" : "Örn. BORAN yarışmasına katılım"} /></Field>
-          <Field label="Kategori"><Input value={draft.category} onChange={(event) => set("category", event.target.value)} placeholder="Ürün ve Marka" /></Field>
+          <Field label="Kategori"><Select value={draft.category} onValueChange={(value) => set("category", value)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{TASK_CATEGORIES.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field>
           <Field label="Sorumlu / Paydaş"><Input value={draft.owner} onChange={(event) => set("owner", event.target.value)} placeholder="Sait Bakırcı / Yönetim" /></Field>
           <Field label="Öncelik"><Select value={draft.priority} onValueChange={(value) => set("priority", value as Priority)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{priorities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field>
           <Field label="Durum"><Select value={draft.status} onValueChange={(value) => set("status", value as Status)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{statuses.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field>
           <Field label="Başlangıç tarihi" hint="İşin başladığı veya başlayacağı gün."><Input type="date" value={draft.followUpDate || ""} max={draft.dueDate || undefined} onChange={(event) => set("followUpDate", event.target.value || null)} /></Field>
           <Field label="Bitiş tarihi" hint="İşin tamamlanmasının planlandığı son gün."><Input type="date" value={draft.dueDate || ""} min={draft.followUpDate || undefined} onChange={(event) => set("dueDate", event.target.value || null)} /></Field>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:col-span-2">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold text-[#17365d]">Zaman ve efor planı</h3><p className="mt-1 text-xs leading-5 text-blue-800">Takvim süresi işin kaç gün açık kalacağını, aktif efor ise gerçekten harcanacak çalışma saatini gösterir.</p></div><Button type="button" size="sm" variant="outline" className="bg-white" onClick={recalculatePlanning}>Sistem Tahminini Yenile</Button></div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="İşin geliş tarihi" hint="İşin size ulaştığı gün."><Input type="date" value={draft.receivedAt?.slice(0, 10) || ""} onChange={(event) => set("receivedAt", event.target.value ? new Date(`${event.target.value}T09:00:00`).toISOString() : null)} /></Field>
+              <Field label="Takvim süresi (gün)" hint="Başlangıçtan tamamlanmaya kadar toplam süre."><Input type="number" min="1" max="3650" value={draft.estimatedDurationDays || ""} onChange={(event) => setDraft((current) => ({ ...current, estimatedDurationDays: Math.max(0, Number(event.target.value) || 0), effortSource: "Manuel" }))} /></Field>
+              <Field label="Takip sıklığı (gün)" hint="Bu işi kaç günde bir kontrol edeceğiniz."><Input type="number" min="1" max="365" value={draft.trackingCadenceDays || ""} onChange={(event) => setDraft((current) => ({ ...current, trackingCadenceDays: Math.max(0, Number(event.target.value) || 0), effortSource: "Manuel" }))} /></Field>
+              <Field label="Tahmini aktif efor (saat)" hint="Fiilen çalışılacak toplam saat."><Input type="number" min="0.25" max="10000" step="0.25" value={Math.round((draft.estimatedEffortMinutes / 60) * 100) / 100 || ""} onChange={(event) => setDraft((current) => ({ ...current, estimatedEffortMinutes: Math.max(0, Math.round((Number(event.target.value) || 0) * 60)), effortSource: "Manuel" }))} /></Field>
+            </div>
+          </div>
           <Field label="Sonraki net aksiyon" className="sm:col-span-2"><Textarea value={draft.nextAction} onChange={(event) => set("nextAction", event.target.value)} placeholder="Bir sonraki somut adımı tek cümlede yazın." /></Field>
-          <Field label="Beklenen karar / onay" className="sm:col-span-2"><Textarea value={draft.decision} onChange={(event) => set("decision", event.target.value)} placeholder="Kimden hangi karar veya desteğin beklendiğini yazın." /></Field>
+          <Field label="Gündem maddesi" hint="Toplantıda hangi kararın, desteğin veya değerlendirmenin isteneceğini yazın." className="sm:col-span-2"><Textarea value={draft.decision} onChange={(event) => set("decision", event.target.value)} placeholder="Örn. Bütçe ve tedarik yöntemi yönetim onayına sunulacak." /></Field>
           <Field label="Risk / bağımlılık" className="sm:col-span-2"><Textarea value={draft.risk} onChange={(event) => set("risk", event.target.value)} placeholder="İşi geciktirebilecek bağımlılığı yazın." /></Field>
-          {draft.taskType === "goal" && <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2"><div><Label htmlFor="management">Yönetim gündemine al</Label><p className="mt-1 text-sm text-slate-500">Karar veya üst yönetim desteği gerektiren hedeflerde açın.</p></div><Switch id="management" checked={draft.managementAgenda} onCheckedChange={(checked) => set("managementAgenda", checked)} /></div>}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2"><div><Label htmlFor="management">Gündem maddesine ekle</Label><p className="mt-1 text-sm text-slate-500">Hedef, alt iş veya takip işi fark etmeksizin toplantı gündemine alınabilir.</p></div><Switch id="management" checked={draft.managementAgenda} onCheckedChange={(checked) => set("managementAgenda", checked)} /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Vazgeç</Button><Button className="bg-[#17365d]" disabled={saving} onClick={onSave}>{saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{editing ? "Değişiklikleri Kaydet" : `${noun} Ekle`}</Button></DialogFooter>
       </DialogContent>

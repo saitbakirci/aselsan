@@ -1,7 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { getDb } from "../../../db";
-import { departmentApprovals, taskMemoryEntries, tasks, visits } from "../../../db/schema";
+import { departmentApprovals, taskMemoryEntries, tasks, taskTimeEntries, visits } from "../../../db/schema";
 
 function actor(request: Request) {
   const encodedName = request.headers.get("oai-authenticated-user-full-name");
@@ -14,17 +14,19 @@ function actor(request: Request) {
 export async function GET(request: Request) {
   try {
     const db = getDb();
-    const [taskRows, approvalRows, visitRows, decisionRows] = await Promise.all([
+    const [taskRows, approvalRows, visitRows, decisionRows, timeRows] = await Promise.all([
       db.select().from(tasks).orderBy(asc(tasks.sortOrder), desc(tasks.updatedAt)).limit(500),
       db.select().from(departmentApprovals).orderBy(asc(departmentApprovals.sortOrder), desc(departmentApprovals.updatedAt)).limit(500),
       db.select().from(visits).orderBy(asc(visits.sortOrder), asc(visits.visitDate), desc(visits.updatedAt)).limit(500),
       db.select().from(taskMemoryEntries).where(eq(taskMemoryEntries.kind, "Karar")).orderBy(desc(taskMemoryEntries.eventDate), desc(taskMemoryEntries.createdAt)).limit(500),
+      db.select().from(taskTimeEntries).orderBy(desc(taskTimeEntries.workDate), desc(taskTimeEntries.createdAt)).limit(5000),
     ]);
     return Response.json({
       tasks: taskRows,
       approvals: approvalRows,
       visits: visitRows,
       decisions: decisionRows,
+      timeEntries: timeRows,
       currentUser: actor(request),
       generatedAt: new Date().toISOString(),
     });

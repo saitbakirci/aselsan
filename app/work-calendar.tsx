@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { formatEffort } from "@/lib/task-planning";
 import { FairCalendar } from "./fair-calendar";
 
 type CalendarView = "week" | "month" | "year";
@@ -38,6 +39,9 @@ export type WorkloadSummary = {
   referenceCapacity: number;
   peopleEquivalent: number;
   capacityPercent: number;
+  totalPlannedMinutes: number;
+  totalLoggedMinutes: number;
+  remainingMinutes: number;
   totalOpenRecords: number;
   goals: number;
   subtasks: number;
@@ -270,9 +274,9 @@ export function WorkCalendar({ open, onOpenChange, tasks, workload, workloadLoad
 }
 
 function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | null; loading: boolean }) {
-  const percent = summary?.capacityPercent || 0;
-  const pressure = percent >= 400 ? "Çok yüksek yük" : percent >= 250 ? "Yüksek yük" : percent >= 100 ? "Kapasite üstü" : "Kapasite içinde";
-  const pressureTone = percent >= 400 ? "border-red-200 bg-red-50 text-red-700" : percent >= 250 ? "border-amber-200 bg-amber-50 text-amber-800" : percent >= 100 ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const remainingHours = (summary?.remainingMinutes || 0) / 60;
+  const pressure = remainingHours >= 160 ? "Çok yüksek yük" : remainingHours >= 80 ? "Yüksek yük" : remainingHours >= 40 ? "Yoğun portföy" : "Yönetilebilir yük";
+  const pressureTone = remainingHours >= 160 ? "border-red-200 bg-red-50 text-red-700" : remainingHours >= 80 ? "border-amber-200 bg-amber-50 text-amber-800" : remainingHours >= 40 ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
   return <section className="shrink-0 border-b border-[#17365d]/15 bg-[#edf2f8] px-3 py-3 sm:px-6">
     <div className="mx-auto grid max-w-[1450px] gap-3 rounded-2xl border border-[#17365d]/15 bg-white p-3 shadow-sm sm:p-4 xl:grid-cols-[minmax(250px,.85fr)_minmax(310px,.85fr)_minmax(520px,1.55fr)] xl:items-center">
@@ -282,9 +286,9 @@ function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | nul
       </div>
 
       <div className="grid grid-cols-3 divide-x divide-slate-200 rounded-xl border border-slate-200 bg-slate-50">
-        <WorkloadMetric label="Kapasite" value={loading || !summary ? "—" : `${summary.capacityPercent}%`} accent />
-        <WorkloadMetric label="Kişi eşdeğeri" value={loading || !summary ? "—" : summary.peopleEquivalent.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} icon={<Scale />} />
-        <WorkloadMetric label="Açık kayıt" value={loading || !summary ? "—" : summary.totalOpenRecords} />
+        <WorkloadMetric label="Kalan efor" value={loading || !summary ? "—" : formatEffort(summary.remainingMinutes)} accent />
+        <WorkloadMetric label="Çalışma haftası" value={loading || !summary ? "—" : summary.peopleEquivalent.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} icon={<Scale />} />
+        <WorkloadMetric label="Kaydedilen" value={loading || !summary ? "—" : formatEffort(summary.totalLoggedMinutes)} />
       </div>
 
       <div className="min-w-0">
@@ -297,7 +301,7 @@ function WorkloadAnalysis({ summary, loading }: { summary: WorkloadSummary | nul
           <span className="flex shrink-0 items-center rounded-xl bg-red-50 px-3 text-xs font-semibold text-red-700">{summary?.critical ?? "—"} kritik</span>
           <span className="flex shrink-0 items-center rounded-xl bg-amber-50 px-3 text-xs font-semibold text-amber-800">{summary?.overdue ?? "—"} geciken</span>
         </div>
-        <p className="mt-1.5 hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex"><BriefcaseBusiness className="size-3.5" /> Aselsan Konya ve MTAL dâhil; fuar takvimi bu hesaba katılmaz.</p>
+        <p className="mt-1.5 hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex"><BriefcaseBusiness className="size-3.5" /> Tahmini aktif efor eksi gün gün kaydedilen çalışma süresi; onaylar bu saat hesabına katılmaz.</p>
       </div>
     </div>
   </section>;
