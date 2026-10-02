@@ -78,8 +78,9 @@ export function ManagementDashboard() {
     const pendingDecisions = activeTasks.filter((task) => task.managementAgenda).length + activeApprovals.length;
     const critical = activeTasks.filter((task) => task.priority === "Kritik").length;
     const overdue = activeTasks.filter((task) => (daysUntil(task.dueDate) ?? 0) < 0).length;
-    const management = activeTasks.filter((task) => task.managementAgenda).length;
-    const managementTasks = activeTasks.filter((task) => task.managementAgenda);
+    const management = activeTasks.filter((task) => task.managementAttention).length;
+    const managementTasks = activeTasks.filter((task) => task.managementAttention);
+    const agendaTasks = activeTasks.filter((task) => task.managementAgenda);
     const goalCount = activeTasks.filter((task) => task.taskType === "goal").length;
     const subtaskCount = activeTasks.filter((task) => task.taskType === "subtask").length;
     const operationalCount = activeTasks.filter((task) => task.taskType === "operational").length;
@@ -123,7 +124,7 @@ export function ManagementDashboard() {
 
     const aselsanCount = activeTasks.filter((task) => workspaceOf(task) === "aselsan").length;
     const mtalCount = activeTasks.filter((task) => workspaceOf(task) === "mtal").length;
-    return { activeTasks, activeApprovals, plannedVisits, pendingDecisions, critical, overdue, management, managementTasks, peopleLoad, statusData, categoryLoad, aselsanCount, mtalCount, goalCount, subtaskCount, operationalCount, totalWorkload, actualByTask, plannedMinutes, loggedMinutes, remainingMinutes };
+    return { activeTasks, activeApprovals, plannedVisits, pendingDecisions, critical, overdue, management, managementTasks, agendaTasks, peopleLoad, statusData, categoryLoad, aselsanCount, mtalCount, goalCount, subtaskCount, operationalCount, totalWorkload, actualByTask, plannedMinutes, loggedMinutes, remainingMinutes };
   }, [data]);
 
   async function exportPdf() {
@@ -174,7 +175,7 @@ export function ManagementDashboard() {
             <Kpi icon={<AlertTriangle />} label="Kritik iş" value={report.critical} tone="red" />
             <Kpi icon={<CalendarDays />} label="Geciken" value={report.overdue} tone="red" />
             <Kpi icon={<Scale />} label="Gündem / onay" value={report.pendingDecisions} tone="amber" />
-            <Kpi icon={<BadgeCheck />} label="Gündem maddesi" value={report.management} tone="navy" />
+            <Kpi icon={<BadgeCheck />} label="Yönetim takibi" value={report.management} tone="navy" />
             <Kpi icon={<Building2 />} label="Planlı ziyaret" value={report.plannedVisits.length} tone="green" />
           </section>
 
@@ -206,15 +207,19 @@ export function ManagementDashboard() {
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-slate-950">Yönetici Değerlendirme Özeti</h2><p className="mt-1 text-sm text-slate-500">Grafiklerin arkasındaki güncel iş, karar ve sorumluluk görünümü</p></div><Badge className="bg-[#17365d]">{report.activeTasks.length} aktif kayıt</Badge></div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <SummaryNote title="Mevcut iş yükü" text={`${report.activeTasks.length} aktif kayıt için ${formatEffort(report.remainingMinutes)} kalan efor bulunuyor. ${report.critical} kayıt kritik, ${report.overdue} kayıt gecikmiş durumda.`} />
-              <SummaryNote title="Gündem ihtiyacı" text={`${report.pendingDecisions} başlık gündem değerlendirmesi veya departman onayı gerektiriyor. ${report.managementTasks.length} iş doğrudan gündeme eklendi.`} />
+              <SummaryNote title="Yönetim ve gündem" text={`${report.managementTasks.length} konu yönetimin takibinde. ${report.agendaTasks.length} iş sizin tarafınızdan toplantı gündemine eklendi; departman onaylarıyla birlikte ${report.pendingDecisions} gündem veya onay başlığı bulunuyor.`} />
               <SummaryNote title="Koordinasyon yükü" text={`${report.activeApprovals.length} açık departman onayı ve ${report.plannedVisits.length} planlı kurumsal ziyaret, ana iş listesinin dışında ayrıca takip ediliyor.`} />
             </div>
           </section>
 
-          <section className="mt-4 grid gap-4 xl:grid-cols-2">
+          <section className="mt-4 grid gap-4 xl:grid-cols-3">
             <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-slate-950">Gündem Maddeleri</h2><p className="mt-1 text-sm text-slate-500">Hedef, alt iş ve takip işi ayrımı olmadan seçilen aktif kayıtlar</p></div><Badge variant="outline">{report.managementTasks.length}</Badge></div>
-              <div className="mt-4 space-y-3">{report.managementTasks.length === 0 ? <EmptyReport text="Aktif gündem maddesi bulunmuyor." /> : report.managementTasks.map((task) => <ReportItem key={task.id} title={task.title} meta={`${task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"} · ${task.status} · ${task.priority}`} rows={[["Gündem maddesi", task.decision], ["Sonraki aksiyon", task.nextAction], ["Tahmini efor", formatEffort(task.estimatedEffortMinutes)], ["Bitiş", formatDate(task.dueDate)]]} />)}</div>
+              <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-slate-950">Yönetimin Takibindeki Konular</h2><p className="mt-1 text-sm text-slate-500">Yönetimin dikkatine sunulan ve kalıcı olarak izlenen aktif kayıtlar</p></div><Badge variant="outline">{report.managementTasks.length}</Badge></div>
+              <div className="mt-4 space-y-3">{report.managementTasks.length === 0 ? <EmptyReport text="Yönetim takibinde aktif konu bulunmuyor." /> : report.managementTasks.map((task) => <ReportItem key={task.id} title={task.title} meta={`${task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"} · ${task.status} · ${task.priority}`} rows={[["Sonraki aksiyon", task.nextAction], ["Tahmini efor", formatEffort(task.estimatedEffortMinutes)], ["Bitiş", formatDate(task.dueDate)]]} />)}</div>
+            </article>
+            <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-slate-950">Gündem Maddeleri</h2><p className="mt-1 text-sm text-slate-500">Yalnızca sizin toplantı gündemine eklediğiniz aktif kayıtlar</p></div><Badge variant="outline">{report.agendaTasks.length}</Badge></div>
+              <div className="mt-4 space-y-3">{report.agendaTasks.length === 0 ? <EmptyReport text="Aktif gündem maddesi bulunmuyor." /> : report.agendaTasks.map((task) => <ReportItem key={task.id} title={task.title} meta={`${task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"} · ${task.status} · ${task.priority}`} rows={[["Gündem maddesi", task.decision], ["Sonraki aksiyon", task.nextAction], ["Bitiş", formatDate(task.dueDate)]]} />)}</div>
             </article>
             <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
               <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-slate-950">Açık Departman Onayları</h2><p className="mt-1 text-sm text-slate-500">İş listesinden bağımsız bütçe, ekipman ve izin talepleri</p></div><Badge variant="outline">{report.activeApprovals.length}</Badge></div>
@@ -225,7 +230,7 @@ export function ManagementDashboard() {
           <section className="report-table mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4 sm:p-5"><div><h2 className="font-semibold text-slate-950">Tam İş ve Aşama Envanteri</h2><p className="mt-1 text-sm text-slate-500">Hedefler, alt işler ve takip işleri; kategori, zaman planı, efor, aksiyon, gündem ve risk bilgileriyle birlikte</p></div><Badge variant="outline">{data.tasks.length} toplam kayıt</Badge></div>
             <div className="overflow-x-auto"><table className="w-full min-w-[1500px] text-left text-sm">
-              <thead className="bg-[#17365d] text-white"><tr><th className="p-3">Alan / Tür</th><th className="p-3">İş / Hedef</th><th className="p-3">Durum</th><th className="p-3">Öncelik</th><th className="p-3">Sorumlu</th><th className="p-3">Başlangıç – Bitiş</th><th className="p-3">Zaman / Efor</th><th className="p-3">Sonraki Aksiyon</th><th className="p-3">Gündem / Risk</th></tr></thead>
+              <thead className="bg-[#17365d] text-white"><tr><th className="p-3">Alan / Tür</th><th className="p-3">İş / Hedef</th><th className="p-3">Durum</th><th className="p-3">Öncelik</th><th className="p-3">Sorumlu</th><th className="p-3">Başlangıç – Bitiş</th><th className="p-3">Zaman / Efor</th><th className="p-3">Sonraki Aksiyon</th><th className="p-3">Yönetim / Gündem / Risk</th></tr></thead>
               <tbody className="divide-y divide-slate-100">{[...data.tasks].sort((a, b) => taskLoadScore(b) - taskLoadScore(a)).map((task) => <tr key={task.id} className={closedTaskStatuses.has(task.status) ? "bg-slate-50/70 text-slate-500" : ""}>
                 <td className="p-3"><Badge variant="outline">{workspaceOf(task) === "mtal" ? "MTAL" : "Aselsan Konya"}</Badge><p className="mt-1 text-xs text-slate-500">{task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"}</p></td>
                 <td className="max-w-xs p-3 font-medium text-slate-900">{task.title}<p className="mt-1 text-xs font-normal text-slate-500">{task.category || "Kategori belirlenmedi"}</p></td>
@@ -233,7 +238,7 @@ export function ManagementDashboard() {
                 <td className="p-3">{formatDate(task.followUpDate)}<br />{formatDate(task.dueDate)}</td>
                 <td className="p-3"><strong>{formatEffort(task.estimatedEffortMinutes)}</strong><p className="mt-1 text-xs text-slate-500">{task.estimatedDurationDays} gün · {task.trackingCadenceDays ? `${task.trackingCadenceDays} günde bir takip` : "takip kapalı"}</p><p className="mt-1 text-xs text-slate-500">Gerçekleşen: {formatEffort(report.actualByTask[task.id] || 0)}</p></td>
                 <td className="max-w-sm p-3 text-slate-600">{task.nextAction || "Belirlenmedi"}</td>
-                <td className="max-w-sm p-3 text-slate-600">{task.decision && <p><strong className="text-slate-800">Gündem:</strong> {task.decision}</p>}{task.risk && <p className="mt-1"><strong className="text-slate-800">Risk:</strong> {task.risk}</p>}{!task.decision && !task.risk && "Belirlenmedi"}</td>
+                <td className="max-w-sm p-3 text-slate-600">{task.managementAttention && <p><strong className="text-blue-800">Yönetim:</strong> Takipte</p>}{task.managementAgenda && <p className="mt-1"><strong className="text-slate-800">Gündem:</strong> {task.decision || "Açıklama girilmedi"}</p>}{task.risk && <p className="mt-1"><strong className="text-slate-800">Risk:</strong> {task.risk}</p>}{!task.managementAttention && !task.managementAgenda && !task.risk && "Belirlenmedi"}</td>
               </tr>)}</tbody>
             </table></div>
           </section>

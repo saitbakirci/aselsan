@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `management_attention` integer DEFAULT false NOT NULL;

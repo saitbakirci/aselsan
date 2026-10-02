@@ -9,6 +9,7 @@ const priorities = ["Kritik", "Yüksek", "Orta", "Düşük"] as const;
 const CATALOG_VERSION = "2026-09-22-v5-calendar-brand";
 const PLANNING_VERSION = "2026-10-02-v1-category-effort";
 const AGENDA_RESET_VERSION = "2026-10-02-v1-user-selected-agenda";
+const MANAGEMENT_ATTENTION_RESTORE_VERSION = "2026-10-02-v1-separate-management-attention";
 const taskTypes = ["goal", "subtask", "operational"] as const;
 const workspaces = ["aselsan", "mtal"] as const;
 const statuses = [
@@ -36,6 +37,7 @@ type TaskInput = {
   decision?: string;
   followUpDate?: string | null;
   managementAgenda?: boolean;
+  managementAttention?: boolean;
   estimatedDurationDays?: number;
   trackingCadenceDays?: number;
   estimatedEffortMinutes?: number;
@@ -312,6 +314,7 @@ function normalized(input: TaskInput, request: Request) {
     decision: cleanText(input.decision, 1000),
     followUpDate,
     managementAgenda: Boolean(input.managementAgenda),
+    managementAttention: Boolean(input.managementAttention),
     estimatedDurationDays,
     trackingCadenceDays,
     estimatedEffortMinutes,
@@ -375,18 +378,18 @@ async function syncCatalog(request: Request, force = false) {
   }
 
   const statements = initialTasks.map((seed) => {
-    const value = normalized(seed, request);
+    const value = normalized({ ...seed, managementAgenda: false, managementAttention: seed.managementAgenda }, request);
     return d1.prepare(`
       INSERT OR IGNORE INTO tasks (
         id, workspace, task_type, parent_goal_id, sort_order, title, category, priority, status, due_date, owner,
-        next_action, decision, follow_up_date, management_agenda,
+        next_action, decision, follow_up_date, management_agenda, management_attention,
         risk, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       seed.id, value.workspace, value.taskType, value.parentGoalId, value.sortOrder,
       value.title, value.category, value.priority, value.status,
       value.dueDate, value.owner, value.nextAction, value.decision,
-      value.followUpDate, value.managementAgenda ? 1 : 0, value.risk,
+      value.followUpDate, 0, value.managementAttention ? 1 : 0, value.risk,
       by, now, now
     );
   });
@@ -626,11 +629,44 @@ async function resetAgendaOnce(request: Request) {
   ]);
 }
 
+async function restoreManagementAttentionOnce() {
+  const d1 = getD1();
+  const state = await d1
+    .prepare("SELECT value FROM app_state WHERE key = ?")
+    .bind("management_attention_restore_version")
+    .first<{ value: string }>();
+  if (state?.value === MANAGEMENT_ATTENTION_RESTORE_VERSION) return;
+
+  const backupRows = await d1.prepare(`
+    SELECT DISTINCT task_id
+    FROM task_history_entries
+    WHERE event_type = ? AND source_ref LIKE ?
+  `).bind(
+    "Gündem Sıfırlama Öncesi",
+    `agenda-reset:${AGENDA_RESET_VERSION}:%`
+  ).all<{ task_id: string }>();
+  const now = new Date().toISOString();
+  const statements = backupRows.results.map((row) => d1.prepare(`
+    UPDATE tasks
+    SET management_attention = 1
+    WHERE id = ?
+  `).bind(row.task_id));
+  statements.push(d1.prepare(`
+    INSERT INTO app_state (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).bind("management_attention_restore_version", MANAGEMENT_ATTENTION_RESTORE_VERSION, now));
+  for (let index = 0; index < statements.length; index += 50) {
+    await d1.batch(statements.slice(index, index + 50));
+  }
+}
+
 export async function GET(request: Request) {
   try {
     await syncCatalog(request);
     await syncPlanningMetadata(request);
     await resetAgendaOnce(request);
+    await restoreManagementAttentionOnce();
     const db = getDb();
     const rows = await db.select().from(tasks).orderBy(desc(tasks.updatedAt)).limit(500);
     return Response.json({ tasks: rows, currentUser: actor(request) });
@@ -648,6 +684,7 @@ export async function POST(request: Request) {
       await syncCatalog(request, payload.action === "bootstrap");
       await syncPlanningMetadata(request);
       await resetAgendaOnce(request);
+      await restoreManagementAttentionOnce();
       const rows = await db.select().from(tasks).orderBy(desc(tasks.updatedAt)).limit(500);
       return Response.json({ tasks: rows, currentUser: actor(request) }, { status: 201 });
     }

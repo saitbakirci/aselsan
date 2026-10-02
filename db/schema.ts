@@ -19,6 +19,9 @@ export const tasks = sqliteTable("tasks", {
   managementAgenda: integer("management_agenda", { mode: "boolean" })
     .notNull()
     .default(false),
+  managementAttention: integer("management_attention", { mode: "boolean" })
+    .notNull()
+    .default(false),
   estimatedDurationDays: integer("estimated_duration_days").notNull().default(0),
   trackingCadenceDays: integer("tracking_cadence_days").notNull().default(0),
   estimatedEffortMinutes: integer("estimated_effort_minutes").notNull().default(0),

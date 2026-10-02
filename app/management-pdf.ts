@@ -17,6 +17,7 @@ export type ManagementTaskRow = {
   decision: string;
   risk: string;
   managementAgenda: boolean;
+  managementAttention: boolean;
   estimatedDurationDays: number;
   trackingCadenceDays: number;
   estimatedEffortMinutes: number;
@@ -274,7 +275,8 @@ export async function createManagementPdf(data: ManagementDashboardData) {
 
   const activeTasks = data.tasks.filter((task) => !closedTaskStatuses.has(task.status));
   const overdueTasks = activeTasks.filter((task) => task.dueDate && task.dueDate < new Date().toISOString().slice(0, 10));
-  const managementTasks = activeTasks.filter((task) => task.managementAgenda);
+  const managementTasks = activeTasks.filter((task) => task.managementAttention);
+  const agendaTasks = activeTasks.filter((task) => task.managementAgenda);
   const pendingApprovals = data.approvals.filter((approval) => !closedApprovalStatuses.has(approval.status));
   const plannedVisits = data.visits.filter((visit) => visit.status === "Planlandı");
   const pendingDecisionCount = activeTasks.filter((task) => task.managementAgenda).length + pendingApprovals.length;
@@ -297,20 +299,28 @@ export async function createManagementPdf(data: ManagementDashboardData) {
     { label: "Kritik iş", value: activeTasks.filter((task) => task.priority === "Kritik").length },
     { label: "Geciken", value: overdueTasks.length },
     { label: "Gündem / onay", value: pendingDecisionCount },
-    { label: "Gündem maddesi", value: managementTasks.length },
+    { label: "Yönetim takibi", value: managementTasks.length },
+    { label: "Gündem maddesi", value: agendaTasks.length },
     { label: "Departman onayı", value: pendingApprovals.length },
     { label: "Planlı ziyaret", value: plannedVisits.length },
     { label: "Toplam açık kayıt", value: totalOpenWorkload },
   ]);
 
-  writer.section("Gündem Maddeleri ve Departman Onayları", managementTasks.length + pendingApprovals.length);
+  writer.section("Yönetimin Takibindeki Konular", managementTasks.length);
   managementTasks.forEach((task) => writer.record(task.title, `${workspaceLabel(task)} · ${task.status} · ${task.priority} · ${clean(task.owner)}`, [
     ["Çalışma dönemi", `${formatDate(task.followUpDate)} – ${formatDate(task.dueDate)}`],
-    ["Gündem maddesi", task.decision],
+    ["Gündem maddesi", task.managementAgenda ? task.decision : ""],
     ["Zaman planı", `${task.estimatedDurationDays} gün · ${task.trackingCadenceDays ? `${task.trackingCadenceDays} günde bir takip` : "takip tamamlandı"}`],
     ["Efor", `${formatEffort(task.estimatedEffortMinutes)} tahmin · ${formatEffort(actualByTask[task.id] || 0)} gerçekleşen`],
     ["Sonraki net aksiyon", task.nextAction],
     ["Risk / bağımlılık", task.risk],
+  ]));
+
+  writer.section("Gündem Maddeleri ve Departman Onayları", agendaTasks.length + pendingApprovals.length);
+  agendaTasks.forEach((task) => writer.record(task.title, `${workspaceLabel(task)} · ${task.status} · ${task.priority} · ${clean(task.owner)}`, [
+    ["Gündem maddesi", task.decision],
+    ["Sonraki net aksiyon", task.nextAction],
+    ["Bitiş", formatDate(task.dueDate)],
   ]));
   pendingApprovals.forEach((approval) => writer.record(approval.title, `Departman Onayı · ${approval.requestType} · ${approval.status} · ${approval.priority}`, [
     ["İhtiyaç tarihi", formatDate(approval.neededBy)],
@@ -332,6 +342,7 @@ export async function createManagementPdf(data: ManagementDashboardData) {
       ["Zaman planı", `${task.estimatedDurationDays} gün · ${task.trackingCadenceDays ? `${task.trackingCadenceDays} günde bir takip` : "takip tamamlandı"}`],
       ["Efor", `${formatEffort(task.estimatedEffortMinutes)} tahmin · ${formatEffort(actualByTask[task.id] || 0)} gerçekleşen`],
       ["Sonraki net aksiyon", task.nextAction],
+      ["Yönetim takibi", task.managementAttention ? "Yönetimin takibinde" : ""],
       ["Gündem maddesi", task.decision],
       ["Risk / bağımlılık", task.risk],
     ]));

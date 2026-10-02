@@ -44,7 +44,7 @@ type Task = {
   id: string; workspace: "aselsan" | "mtal"; taskType: TaskType; parentGoalId: string | null; sortOrder: number;
   title: string; category: string; priority: Priority; status: Status;
   dueDate: string | null; owner: string; nextAction: string; decision: string;
-  followUpDate: string | null; managementAgenda: boolean; risk: string;
+  followUpDate: string | null; managementAgenda: boolean; managementAttention: boolean; risk: string;
   estimatedDurationDays: number; trackingCadenceDays: number; estimatedEffortMinutes: number;
   receivedAt: string | null; completedAt: string | null; effortSource: string;
   updatedBy: string; createdAt: string; updatedAt: string;
@@ -71,7 +71,7 @@ const priorityRank: Record<Priority, number> = { Kritik: 0, Yüksek: 1, Orta: 2,
 
 function makeTaskDraft(taskType: TaskType = "goal", parentGoalId: string | null = null, workspace: "aselsan" | "mtal" = "aselsan"): TaskDraft {
   const estimate = estimateTaskPlanning({ title: "Yeni iş", taskType, priority: "Orta", status: "Başlamadı" });
-  return { workspace, taskType, parentGoalId, sortOrder: 0, title: "", category: estimate.category, priority: "Orta", status: "Başlamadı", dueDate: null, owner: "Sait Bakırcı", nextAction: "", decision: "", followUpDate: null, managementAgenda: false, estimatedDurationDays: estimate.estimatedDurationDays, trackingCadenceDays: estimate.trackingCadenceDays, estimatedEffortMinutes: estimate.estimatedEffortMinutes, receivedAt: new Date().toISOString(), completedAt: null, effortSource: "Sistem Tahmini", risk: "" };
+  return { workspace, taskType, parentGoalId, sortOrder: 0, title: "", category: estimate.category, priority: "Orta", status: "Başlamadı", dueDate: null, owner: "Sait Bakırcı", nextAction: "", decision: "", followUpDate: null, managementAgenda: false, managementAttention: false, estimatedDurationDays: estimate.estimatedDurationDays, trackingCadenceDays: estimate.trackingCadenceDays, estimatedEffortMinutes: estimate.estimatedEffortMinutes, receivedAt: new Date().toISOString(), completedAt: null, effortSource: "Sistem Tahmini", risk: "" };
 }
 
 function localDateKey(date = new Date()) {
@@ -251,7 +251,7 @@ export default function Home() {
     waiting: activeTasks.filter((task) => task.status === "Beklemede").length,
     approvals: activeTasks.filter((task) => task.status === "Onay Bekliyor").length,
     overdue: activeTasks.filter((task) => dueState(task) === "overdue").length,
-    management: workspaceAllTasks.filter((task) => task.managementAgenda && !isClosed(task)).length,
+    management: workspaceAllTasks.filter((task) => task.managementAttention && !isClosed(task)).length,
     completed: workspaceGoals.filter((task) => task.status === "Tamamlandı").length,
     cancelled: workspaceGoals.filter((task) => task.status === "İptal Edildi").length,
   }), [activeTasks, workspaceGoals, workspaceAllTasks]);
@@ -266,7 +266,7 @@ export default function Home() {
       if (view === "active" && closed) return false;
       if (view === "completed" && task.status !== "Tamamlandı") return false;
       if (view === "cancelled" && task.status !== "İptal Edildi") return false;
-      if (view === "management" && (!task.managementAgenda || closed)) return false;
+      if (view === "management" && (!task.managementAttention || closed)) return false;
       if (view === "overdue" && dueState(task) !== "overdue") return false;
       if (view === "undated" && (task.dueDate || closed)) return false;
       if (view === "week" && (!task.dueDate || task.dueDate < today || task.dueDate > weekEnd || closed)) return false;
@@ -331,7 +331,7 @@ export default function Home() {
 
   function openEdit(task: Task) {
     setEditingId(task.id);
-    setDraft({ workspace: taskWorkspace(task), taskType: task.taskType || "goal", parentGoalId: task.parentGoalId, sortOrder: task.sortOrder || 0, title: task.title, category: task.category, priority: task.priority, status: task.status, dueDate: task.dueDate, owner: task.owner, nextAction: task.nextAction, decision: task.decision, followUpDate: task.followUpDate, managementAgenda: task.managementAgenda, estimatedDurationDays: task.estimatedDurationDays || 0, trackingCadenceDays: task.trackingCadenceDays || 0, estimatedEffortMinutes: task.estimatedEffortMinutes || 0, receivedAt: task.receivedAt, completedAt: task.completedAt, effortSource: task.effortSource || "Sistem Tahmini", risk: task.risk });
+    setDraft({ workspace: taskWorkspace(task), taskType: task.taskType || "goal", parentGoalId: task.parentGoalId, sortOrder: task.sortOrder || 0, title: task.title, category: task.category, priority: task.priority, status: task.status, dueDate: task.dueDate, owner: task.owner, nextAction: task.nextAction, decision: task.decision, followUpDate: task.followUpDate, managementAgenda: task.managementAgenda, managementAttention: task.managementAttention, estimatedDurationDays: task.estimatedDurationDays || 0, trackingCadenceDays: task.trackingCadenceDays || 0, estimatedEffortMinutes: task.estimatedEffortMinutes || 0, receivedAt: task.receivedAt, completedAt: task.completedAt, effortSource: task.effortSource || "Sistem Tahmini", risk: task.risk });
     setDetailOpen(false);
     setOperationalOpen(false);
     setEditorOpen(true);
@@ -394,6 +394,19 @@ export default function Home() {
     }
   }
 
+  async function toggleManagementAttention(task: Task, enabled = !task.managementAttention) {
+    const previous = tasks;
+    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, managementAttention: enabled } : item));
+    try {
+      const data = await requestJson<TaskResponse>("/api/tasks", { method: "PATCH", body: JSON.stringify({ ...task, managementAttention: enabled }) });
+      setTasks((current) => current.map((item) => item.id === task.id ? data.task : item));
+      toast.success(enabled ? "Yönetim takibine alındı." : "Yönetim takibinden çıkarıldı.");
+    } catch (error) {
+      setTasks(previous);
+      toast.error(error instanceof Error ? error.message : "Yönetim takibi güncellenemedi.");
+    }
+  }
+
   async function deleteTask() {
     if (!deleteId) return;
     try {
@@ -443,11 +456,11 @@ export default function Home() {
     finally { setMemoryDeleteId(null); }
   }
 
-  const managementTasks = workspaceAllTasks.filter((task) => task.managementAgenda && !isClosed(task));
-  const managementText = managementTasks.map((task, index) => `${index + 1}. ${task.title}\nTür: ${task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"} | Durum: ${task.status} | Öncelik: ${task.priority}${task.dueDate ? ` | Bitiş: ${formatDate(task.dueDate)}` : " | Bitiş tarihi belirlenmeli"}\nSonraki adım: ${task.nextAction}${task.decision ? `\nGündem maddesi: ${task.decision}` : ""}`).join("\n\n");
+  const managementTasks = workspaceAllTasks.filter((task) => task.managementAttention && !isClosed(task));
+  const managementText = managementTasks.map((task, index) => `${index + 1}. ${task.title}\nTür: ${task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"} | Durum: ${task.status} | Öncelik: ${task.priority}${task.dueDate ? ` | Bitiş: ${formatDate(task.dueDate)}` : " | Bitiş tarihi belirlenmeli"}\nSonraki adım: ${task.nextAction}${task.managementAgenda && task.decision ? `\nGündem maddesi: ${task.decision}` : ""}`).join("\n\n");
   const selectedVisibleCount = visibleTasks.filter((task) => selectedGoalSet.has(task.id)).length;
   const visibleSelectionState: boolean | "indeterminate" = visibleTasks.length > 0 && selectedVisibleCount === visibleTasks.length ? true : selectedVisibleCount > 0 ? "indeterminate" : false;
-  async function copySummary() { await navigator.clipboard.writeText(`Güncel yönetim gündemi\n\n${managementText}`); toast.success("Yönetim özeti kopyalandı."); }
+  async function copySummary() { await navigator.clipboard.writeText(`Yönetimin takibindeki konular\n\n${managementText}`); toast.success("Yönetim takip özeti kopyalandı."); }
 
   return (
     <main className="min-h-screen bg-[#f3f6fa] text-slate-900">
@@ -494,7 +507,7 @@ export default function Home() {
           <MetricCard label="Beklemede" value={metrics.waiting} icon={<PauseCircle />} tone="slate" active={statusFilter === "Beklemede"} onClick={() => { setStatusFilter(statusFilter === "Beklemede" ? "Tümü" : "Beklemede"); setPriorityFilter("Tümü"); setView("active"); }} />
           <MetricCard label="Onay bekleyen" value={metrics.approvals} icon={<CalendarClock />} tone="amber" active={statusFilter === "Onay Bekliyor"} onClick={() => { setStatusFilter(statusFilter === "Onay Bekliyor" ? "Tümü" : "Onay Bekliyor"); setPriorityFilter("Tümü"); setView("active"); }} />
           <MetricCard label="Geciken" value={metrics.overdue} icon={<AlertTriangle />} tone="red" active={view === "overdue"} onClick={() => { setView(view === "overdue" ? "active" : "overdue"); setStatusFilter("Tümü"); }} />
-          <MetricCard label="Yönetim" value={metrics.management} icon={<Users />} tone="blue" active={view === "management"} onClick={() => { setView(view === "management" ? "active" : "management"); setStatusFilter("Tümü"); }} />
+          <MetricCard label="Yönetim takibi" value={metrics.management} icon={<Users />} tone="blue" active={view === "management"} onClick={() => { setView(view === "management" ? "active" : "management"); setStatusFilter("Tümü"); }} />
           <MetricCard label="Tamamlanan" value={metrics.completed} icon={<CheckCircle2 />} tone="green" active={view === "completed"} onClick={() => { setView(view === "completed" ? "active" : "completed"); setStatusFilter("Tümü"); setPriorityFilter("Tümü"); }} />
           <MetricCard label="İptal edilen" value={metrics.cancelled} icon={<Ban />} tone="rose" active={view === "cancelled"} onClick={() => { setView(view === "cancelled" ? "active" : "cancelled"); setStatusFilter("Tümü"); setPriorityFilter("Tümü"); }} />
         </section>
@@ -520,7 +533,7 @@ export default function Home() {
             </div>
           </div>
 
-          {view === "management" && <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-200 bg-blue-50 px-4 py-3 sm:px-5"><p className="text-sm font-medium text-blue-900">Yalnızca yönetim gündemindeki açık hedefler gösteriliyor.</p><Button variant="outline" size="sm" className="border-blue-300 bg-white text-blue-800" onClick={() => { setView("active"); setStatusFilter("Tümü"); setPriorityFilter("Tümü"); }}>Tüm hedeflere dön</Button></div>}
+          {view === "management" && <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-200 bg-blue-50 px-4 py-3 sm:px-5"><p className="text-sm font-medium text-blue-900">Yalnızca yönetimin dikkatine sunulan ve takibinde olan açık hedefler gösteriliyor. Bu görünüm toplantı gündeminden bağımsızdır.</p><Button variant="outline" size="sm" className="border-blue-300 bg-white text-blue-800" onClick={() => { setView("active"); setStatusFilter("Tümü"); setPriorityFilter("Tümü"); }}>Tüm hedeflere dön</Button></div>}
 
           {loading ? (
             <div className="grid min-h-72 place-items-center"><div className="flex items-center gap-3 text-slate-500"><Loader2 className="size-5 animate-spin" /> Hedefler yükleniyor</div></div>
@@ -543,10 +556,10 @@ export default function Home() {
 
       <TaskEditor open={editorOpen} onOpenChange={setEditorOpen} draft={draft} setDraft={setDraft} goals={workspaceGoals} editing={Boolean(editingId)} saving={saving} onSave={saveTask} />
       <WorkCalendar open={calendarOpen} onOpenChange={setCalendarOpen} tasks={tasks} workload={workload} workloadLoading={workloadLoading} onOpenTask={(taskId, taskWorkspaceValue) => { const task = tasks.find((item) => item.id === taskId); if (task) { setWorkspace(taskWorkspaceValue); openDetails(task); } }} />
-      <GoalDetailSheet open={detailOpen} onOpenChange={setDetailOpen} task={selectedTask} parent={selectedParent} childTasks={selectedChildren} memories={memories} memoryLoading={memoryLoading} onEditTask={openEdit} onDeleteTask={(task) => setDeleteId(task.id)} onStatus={updateStatus} onAgenda={toggleAgenda} onAddSubtask={(goalId) => { setDetailOpen(false); openNewTask("subtask", goalId); }} onAddMemory={openNewMemory} onEditMemory={openEditMemory} onDeleteMemory={(entry) => setMemoryDeleteId(entry.id)} onOpenParent={(parentTask) => openDetails(parentTask)} onTimeChanged={() => loadWorkload(true)} />
+      <GoalDetailSheet open={detailOpen} onOpenChange={setDetailOpen} task={selectedTask} parent={selectedParent} childTasks={selectedChildren} memories={memories} memoryLoading={memoryLoading} onEditTask={openEdit} onDeleteTask={(task) => setDeleteId(task.id)} onStatus={updateStatus} onAgenda={toggleAgenda} onManagementAttention={toggleManagementAttention} onAddSubtask={(goalId) => { setDetailOpen(false); openNewTask("subtask", goalId); }} onAddMemory={openNewMemory} onEditMemory={openEditMemory} onDeleteMemory={(entry) => setMemoryDeleteId(entry.id)} onOpenParent={(parentTask) => openDetails(parentTask)} onTimeChanged={() => loadWorkload(true)} />
       <TrackingCenter open={operationalOpen} onOpenChange={setOperationalOpen} tasks={tasks} workspace={workspace} onAddTask={() => { setOperationalOpen(false); openNewTask("operational"); }} onOpenTask={(taskId) => { const task = tasks.find((item) => item.id === taskId); if (task) { setOperationalOpen(false); openDetails(task); } }} onEditTask={(taskId) => { const task = tasks.find((item) => item.id === taskId); if (task) openEdit(task); }} onDeleteTask={(taskId) => setDeleteId(taskId)} onStatusChange={(taskId, status) => { const task = tasks.find((item) => item.id === taskId); if (task) return updateStatus(task, status); }} onAgendaChange={(taskId, enabled) => { const task = tasks.find((item) => item.id === taskId); if (task) return toggleAgenda(task, enabled); }} onTimeChanged={() => loadWorkload(true)} />
       <MemoryEditor open={memoryEditorOpen} onOpenChange={setMemoryEditorOpen} draft={memoryDraft} setDraft={setMemoryDraft} editing={Boolean(editingMemoryId)} saving={memorySaving} onSave={saveMemory} />
-      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}><DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Yönetici Özeti</DialogTitle><DialogDescription>Gündeme eklenen hedef, alt iş ve takip işlerinin tamamı.</DialogDescription></DialogHeader><div className="space-y-3">{managementTasks.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Açık gündem maddesi bulunmuyor.</p> : managementTasks.map((task, index) => <button key={task.id} className="block w-full rounded-xl border border-slate-200 p-4 text-left transition hover:border-[#2f5597]/40 hover:bg-slate-50" onClick={() => { setSummaryOpen(false); openDetails(task); }}><div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17365d] text-sm font-bold text-white">{index + 1}</span><div className="min-w-0"><div className="flex flex-wrap gap-2"><Badge variant="outline">{task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"}</Badge><Badge variant="outline">{task.category}</Badge></div><h3 className="mt-2 font-semibold text-slate-900">{task.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{task.nextAction}</p>{task.decision && <p className="mt-2 text-sm font-medium text-[#17365d]">Gündem maddesi: {task.decision}</p>}<p className="mt-2 text-xs text-slate-400">{formatEffort(task.estimatedEffortMinutes)} efor · Bitiş: {formatDate(task.dueDate)}</p></div></div></button>)}</div><DialogFooter><Button variant="outline" onClick={copySummary}><ClipboardList /> Özeti Kopyala</Button><Button className="bg-[#17365d]" onClick={() => setSummaryOpen(false)}>Kapat</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}><DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Yönetim Takip Özeti</DialogTitle><DialogDescription>Yönetimin dikkatine sunulan aktif konular. Toplantı gündemi ayrıca “Gündem Maddeleri” bölümünden yönetilir.</DialogDescription></DialogHeader><div className="space-y-3">{managementTasks.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Yönetim takibinde açık konu bulunmuyor.</p> : managementTasks.map((task, index) => <button key={task.id} className="block w-full rounded-xl border border-slate-200 p-4 text-left transition hover:border-[#2f5597]/40 hover:bg-slate-50" onClick={() => { setSummaryOpen(false); openDetails(task); }}><div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17365d] text-sm font-bold text-white">{index + 1}</span><div className="min-w-0"><div className="flex flex-wrap gap-2"><Badge variant="outline">{task.taskType === "goal" ? "Hedef / Proje" : task.taskType === "subtask" ? "Alt İş" : "Takip İşi"}</Badge><Badge variant="outline">{task.category}</Badge>{task.managementAgenda && <Badge className="bg-amber-600">Gündem maddesi</Badge>}</div><h3 className="mt-2 font-semibold text-slate-900">{task.title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{task.nextAction}</p>{task.managementAgenda && task.decision && <p className="mt-2 text-sm font-medium text-[#17365d]">Gündem maddesi: {task.decision}</p>}<p className="mt-2 text-xs text-slate-400">{formatEffort(task.estimatedEffortMinutes)} efor · Bitiş: {formatDate(task.dueDate)}</p></div></div></button>)}</div><DialogFooter><Button variant="outline" onClick={copySummary}><ClipboardList /> Özeti Kopyala</Button><Button className="bg-[#17365d]" onClick={() => setSummaryOpen(false)}>Kapat</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={installOpen} onOpenChange={setInstallOpen}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>iPhone’a Kurulum</DialogTitle><DialogDescription>Uygulamayı Safari üzerinden ana ekranınıza ekleyebilirsiniz.</DialogDescription></DialogHeader><ol className="space-y-3 text-sm text-slate-700"><li className="flex gap-3"><span className="install-step">1</span><span>Bu uygulamayı iPhone’da <strong>Safari</strong> ile açın.</span></li><li className="flex gap-3"><span className="install-step">2</span><span>Alt menüdeki <strong>Paylaş</strong> simgesine dokunun.</span></li><li className="flex gap-3"><span className="install-step">3</span><span><strong>Ana Ekrana Ekle</strong> seçeneğini seçip onaylayın.</span></li></ol><div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-800">Ana ekrandan açıldığında uygulama tam ekran çalışır. Telefon ve bilgisayardaki veriler aynı kayıt alanını kullanır.</div><DialogFooter><Button className="bg-[#17365d]" onClick={() => setInstallOpen(false)}><Download /> Tamam</Button></DialogFooter></DialogContent></Dialog>
       <AlertDialog open={Boolean(deleteId)} onOpenChange={(open) => !open && setDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Bu işi silmek istiyor musunuz?</AlertDialogTitle><AlertDialogDescription>İş, ortak takip ekranından kalıcı olarak kaldırılacaktır.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Vazgeç</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={deleteTask}>Sil</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <AlertDialog open={Boolean(memoryDeleteId)} onOpenChange={(open) => !open && setMemoryDeleteId(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Bu hafıza kaydını silmek istiyor musunuz?</AlertDialogTitle><AlertDialogDescription>Geçmiş bilgi veya doküman kaydı kalıcı olarak kaldırılacaktır.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Vazgeç</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={deleteMemory}>Sil</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
@@ -573,6 +586,7 @@ function DesktopTaskRow({ task, childCount, selected, onSelectedChange, onOpen, 
             <p className="mt-1 text-sm text-slate-500">{task.category} · {task.owner || "Sorumlu belirlenmedi"}</p>
             <p className="mt-1 text-xs font-medium text-slate-400">{formatEffort(task.estimatedEffortMinutes)} efor · {task.estimatedDurationDays} gün takvim süresi</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
+              {task.managementAttention && <Badge className="bg-blue-700"><ShieldCheck /> Yönetim takibinde</Badge>}
               {childCount > 0 && <Badge variant="secondary"><Layers3 /> {childCount} alt iş</Badge>}
               <span className="inline-flex items-center gap-1 text-xs font-medium text-[#2f5597]"><History className="size-3.5" /> İş hafızasını aç</span>
             </div>
@@ -597,7 +611,7 @@ function MobileTaskCard({ task, childCount, selected, onSelectedChange, onOpen, 
       <div className="flex items-start justify-between gap-3">
         <Checkbox checked={selected} onCheckedChange={(checked) => onSelectedChange(checked === true)} className="mt-1 size-5 border-slate-400 data-[state=checked]:border-[#2f5597] data-[state=checked]:bg-[#2f5597]" aria-label={`${task.title} hedefini sunum için seç`} />
         <button className="min-w-0 flex-1 text-left" onClick={onOpen}>
-          <div className="flex flex-wrap gap-2"><Badge variant="outline" className={priorityClass(task.priority)}>{task.priority}</Badge>{task.managementAgenda && <Badge className="bg-[#17365d]">Gündemde</Badge>}{childCount > 0 && <Badge variant="secondary"><Layers3 /> {childCount} alt iş</Badge>}</div>
+          <div className="flex flex-wrap gap-2"><Badge variant="outline" className={priorityClass(task.priority)}>{task.priority}</Badge>{task.managementAttention && <Badge className="bg-blue-700"><ShieldCheck /> Yönetim takibinde</Badge>}{task.managementAgenda && <Badge className="bg-amber-600">Gündem maddesi</Badge>}{childCount > 0 && <Badge variant="secondary"><Layers3 /> {childCount} alt iş</Badge>}</div>
           <h3 className="mt-3 text-base font-semibold leading-6 text-slate-950">{task.title}</h3>
           <p className="mt-1 text-sm text-slate-500">{task.category} · {task.owner || "Sorumlu belirlenmedi"}</p><p className="mt-1 text-xs font-medium text-slate-400">{formatEffort(task.estimatedEffortMinutes)} efor · {task.estimatedDurationDays} gün</p>
         </button>
@@ -617,7 +631,7 @@ function StatusSelect({ task, onStatus, fullWidth = false }: { task: Task; onSta
   return <Select value={task.status} onValueChange={(value) => onStatus(value as Status)}><SelectTrigger className={`h-9 border text-xs font-medium shadow-none ${fullWidth ? "w-full" : "w-40"} ${statusClass(task.status)}`}><SelectValue /></SelectTrigger><SelectContent>{statuses.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>;
 }
 
-function GoalDetailSheet({ open, onOpenChange, task, parent, childTasks, memories, memoryLoading, onEditTask, onDeleteTask, onStatus, onAgenda, onAddSubtask, onAddMemory, onEditMemory, onDeleteMemory, onOpenParent, onTimeChanged }: { open: boolean; onOpenChange: (open: boolean) => void; task: Task | null; parent: Task | null; childTasks: Task[]; memories: MemoryEntry[]; memoryLoading: boolean; onEditTask: (task: Task) => void; onDeleteTask: (task: Task) => void; onStatus: (task: Task, status: Status) => void; onAgenda: (task: Task, enabled?: boolean) => void; onAddSubtask: (goalId: string) => void; onAddMemory: (taskId: string, kind?: MemoryKind) => void; onEditMemory: (entry: MemoryEntry) => void; onDeleteMemory: (entry: MemoryEntry) => void; onOpenParent: (task: Task) => void; onTimeChanged: () => void }) {
+function GoalDetailSheet({ open, onOpenChange, task, parent, childTasks, memories, memoryLoading, onEditTask, onDeleteTask, onStatus, onAgenda, onManagementAttention, onAddSubtask, onAddMemory, onEditMemory, onDeleteMemory, onOpenParent, onTimeChanged }: { open: boolean; onOpenChange: (open: boolean) => void; task: Task | null; parent: Task | null; childTasks: Task[]; memories: MemoryEntry[]; memoryLoading: boolean; onEditTask: (task: Task) => void; onDeleteTask: (task: Task) => void; onStatus: (task: Task, status: Status) => void; onAgenda: (task: Task, enabled?: boolean) => void; onManagementAttention: (task: Task, enabled?: boolean) => void; onAddSubtask: (goalId: string) => void; onAddMemory: (taskId: string, kind?: MemoryKind) => void; onEditMemory: (entry: MemoryEntry) => void; onDeleteMemory: (entry: MemoryEntry) => void; onOpenParent: (task: Task) => void; onTimeChanged: () => void }) {
   const documents = memories
     .filter((entry) => entry.kind === "Doküman")
     .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || b.eventDate.localeCompare(a.eventDate));
@@ -627,7 +641,7 @@ function GoalDetailSheet({ open, onOpenChange, task, parent, childTasks, memorie
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl">
         <SheetHeader className="border-b border-slate-200 bg-white px-5 py-5 pr-12 sm:px-6">
-          <div className="flex flex-wrap items-center gap-2"><Badge className="bg-[#17365d]">{typeLabel}</Badge>{task && <Badge variant="outline" className={priorityClass(task.priority)}>{task.priority}</Badge>}</div>
+          <div className="flex flex-wrap items-center gap-2"><Badge className="bg-[#17365d]">{typeLabel}</Badge>{task && <Badge variant="outline" className={priorityClass(task.priority)}>{task.priority}</Badge>}{task?.managementAttention && <Badge className="bg-blue-700"><ShieldCheck /> Yönetim takibinde</Badge>}{task?.managementAgenda && <Badge className="bg-amber-600">Gündem maddesi</Badge>}</div>
           <SheetTitle className="mt-2 text-xl leading-7 text-[#17365d]">{task?.title || "İş detayı"}</SheetTitle>
           <SheetDescription>{task ? `${task.category || "Kategori belirlenmedi"} · ${task.owner || "Sorumlu belirlenmedi"}` : "Kayıt yükleniyor"}</SheetDescription>
         </SheetHeader>
@@ -636,7 +650,7 @@ function GoalDetailSheet({ open, onOpenChange, task, parent, childTasks, memorie
             {parent && <button onClick={() => onOpenParent(parent)} className="mb-4 flex w-full items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-left text-sm font-medium text-blue-800"><ChevronLeft className="size-4" /> Ana hedef: {parent.title}</button>}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
               <StatusSelect task={task} onStatus={(status) => onStatus(task, status)} />
-              <div className="flex flex-wrap gap-2"><Button size="sm" variant={task.managementAgenda ? "secondary" : "outline"} onClick={() => onAgenda(task)}><Star className={task.managementAgenda ? "fill-current" : ""} /> {task.managementAgenda ? "Gündemden Çıkar" : "Gündem Maddesine Ekle"}</Button><Button size="sm" variant="outline" onClick={() => onEditTask(task)}><Edit3 /> Düzenle</Button><Button size="sm" className="bg-[#17365d]" onClick={() => onAddMemory(task.id)}><Plus /> Gelişme Ekle</Button></div>
+              <div className="flex flex-wrap gap-2"><Button size="sm" variant={task.managementAttention ? "secondary" : "outline"} onClick={() => onManagementAttention(task)}><ShieldCheck /> {task.managementAttention ? "Yönetim Takibinden Çıkar" : "Yönetim Takibine Al"}</Button><Button size="sm" variant={task.managementAgenda ? "secondary" : "outline"} onClick={() => onAgenda(task)}><Star className={task.managementAgenda ? "fill-current" : ""} /> {task.managementAgenda ? "Gündemden Çıkar" : "Gündem Maddesine Ekle"}</Button><Button size="sm" variant="outline" onClick={() => onEditTask(task)}><Edit3 /> Düzenle</Button><Button size="sm" className="bg-[#17365d]" onClick={() => onAddMemory(task.id)}><Plus /> Gelişme Ekle</Button></div>
             </div>
 
             <section className="grid gap-3 sm:grid-cols-2">
@@ -756,7 +770,8 @@ function TaskEditor({ open, onOpenChange, draft, setDraft, goals, editing, savin
           <Field label="Sonraki net aksiyon" className="sm:col-span-2"><Textarea value={draft.nextAction} onChange={(event) => set("nextAction", event.target.value)} placeholder="Bir sonraki somut adımı tek cümlede yazın." /></Field>
           <Field label="Gündem maddesi" hint="Toplantıda hangi kararın, desteğin veya değerlendirmenin isteneceğini yazın." className="sm:col-span-2"><Textarea value={draft.decision} onChange={(event) => set("decision", event.target.value)} placeholder="Örn. Bütçe ve tedarik yöntemi yönetim onayına sunulacak." /></Field>
           <Field label="Risk / bağımlılık" className="sm:col-span-2"><Textarea value={draft.risk} onChange={(event) => set("risk", event.target.value)} placeholder="İşi geciktirebilecek bağımlılığı yazın." /></Field>
-          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2"><div><Label htmlFor="management">Gündem maddesine ekle</Label><p className="mt-1 text-sm text-slate-500">Hedef, alt iş veya takip işi fark etmeksizin toplantı gündemine alınabilir.</p></div><Switch id="management" checked={draft.managementAgenda} onCheckedChange={(checked) => set("managementAgenda", checked)} /></div>
+          <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 p-4 sm:col-span-2"><div><Label htmlFor="management-attention">Yönetimin takibinde</Label><p className="mt-1 text-sm text-blue-800">Yönetimin dikkatine sunulan ve sürekli takip edilen konu. Toplantı gündeminden bağımsızdır.</p></div><Switch id="management-attention" checked={draft.managementAttention} onCheckedChange={(checked) => set("managementAttention", checked)} /></div>
+          <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4 sm:col-span-2"><div><Label htmlFor="meeting-agenda">Gündem maddesine ekle</Label><p className="mt-1 text-sm text-amber-800">Yalnızca sizin seçtiğiniz toplantı listesine eklenir; yönetim takibi durumunu değiştirmez.</p></div><Switch id="meeting-agenda" checked={draft.managementAgenda} onCheckedChange={(checked) => set("managementAgenda", checked)} /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Vazgeç</Button><Button className="bg-[#17365d]" disabled={saving} onClick={onSave}>{saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}{editing ? "Değişiklikleri Kaydet" : `${noun} Ekle`}</Button></DialogFooter>
       </DialogContent>

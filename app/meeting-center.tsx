@@ -173,6 +173,17 @@ export const MeetingCenter = forwardRef<MeetingCenterHandle, MeetingCenterProps>
     }
   }
 
+  async function openHistoryFromMeeting() {
+    setPresentationOpen(false);
+    setSummaryOpen(false);
+    await loadHistory();
+  }
+
+  async function createNoteFromHistory() {
+    setHistoryOpen(false);
+    await createStandaloneMeeting();
+  }
+
   async function openMeeting(id: string, destination: "presentation" | "summary") {
     setMeetingLoading(true);
     try {
@@ -290,32 +301,26 @@ export const MeetingCenter = forwardRef<MeetingCenterHandle, MeetingCenterProps>
         </DialogContent>
       </Dialog>
 
-      <PresentationDialog open={presentationOpen} onOpenChange={(open) => { setPresentationOpen(open); if (!open) void flushDirtyNotes().catch((error) => toast.error(error instanceof Error ? error.message : "Toplantı notu kaydedilemedi.")); }} detail={activeMeeting} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex} onDraftNote={updateDraftNote} onSaveItemNote={saveItemNote} onFlushNotes={flushDirtyNotes} onSaveTitle={(title) => saveMeeting({ title })} onSaveGeneral={async (notes) => { await saveMeeting({ generalNotes: notes }); }} onOpenSummary={() => { setPresentationOpen(false); setSummaryOpen(true); void flushDirtyNotes().catch((error) => toast.error(error instanceof Error ? error.message : "Toplantı notu kaydedilemedi.")); }} onFinish={finishMeeting} />
+      <PresentationDialog key={activeMeeting?.meeting.id || "no-active-meeting"} open={presentationOpen} onOpenChange={(open) => { setPresentationOpen(open); if (!open) void flushDirtyNotes().catch((error) => toast.error(error instanceof Error ? error.message : "Toplantı notu kaydedilemedi.")); }} detail={activeMeeting} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex} onDraftNote={updateDraftNote} onSaveItemNote={saveItemNote} onFlushNotes={flushDirtyNotes} onSaveTitle={(title) => saveMeeting({ title })} onSaveGeneral={async (notes) => { await saveMeeting({ generalNotes: notes }); }} onOpenSummary={() => { setPresentationOpen(false); setSummaryOpen(true); void flushDirtyNotes().catch((error) => toast.error(error instanceof Error ? error.message : "Toplantı notu kaydedilemedi.")); }} onOpenHistory={openHistoryFromMeeting} onFinish={finishMeeting} />
 
-      <MeetingHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} meetings={meetings} loading={historyLoading || meetingLoading} onOpenPresentation={(id) => openMeeting(id, "presentation")} onOpenSummary={(id) => openMeeting(id, "summary")} />
+      <MeetingHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} meetings={meetings} loading={historyLoading || meetingLoading} onNewNote={createNoteFromHistory} onOpenPresentation={(id) => openMeeting(id, "presentation")} onOpenSummary={(id) => openMeeting(id, "summary")} />
 
-      <MeetingSummaryDialog open={summaryOpen} onOpenChange={setSummaryOpen} detail={activeMeeting} onBackToPresentation={() => { setSummaryOpen(false); setPresentationOpen(true); }} onSaveGeneral={async (generalNotes) => { await saveMeeting({ generalNotes }); }} onCopy={(detail) => copyText(meetingText(detail))} onEmail={openEmail} onShare={shareMeeting} />
+      <MeetingSummaryDialog key={activeMeeting?.meeting.id || "no-meeting-summary"} open={summaryOpen} onOpenChange={setSummaryOpen} detail={activeMeeting} onBackToPresentation={() => { setSummaryOpen(false); setPresentationOpen(true); }} onOpenHistory={openHistoryFromMeeting} onSaveGeneral={async (generalNotes) => { await saveMeeting({ generalNotes }); }} onCopy={(detail) => copyText(meetingText(detail))} onEmail={openEmail} onShare={shareMeeting} />
     </>
   );
 });
 
-function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurrentIndex, onDraftNote, onSaveItemNote, onFlushNotes, onSaveTitle, onSaveGeneral, onOpenSummary, onFinish }: { open: boolean; onOpenChange: (open: boolean) => void; detail: MeetingDetail | null; currentIndex: number; setCurrentIndex: (index: number) => void; onDraftNote: (itemId: string, note: string) => void; onSaveItemNote: (itemId: string, note: string) => Promise<void>; onFlushNotes: () => Promise<void>; onSaveTitle: (title: string) => Promise<MeetingDetail | null>; onSaveGeneral: (notes: string) => Promise<void>; onOpenSummary: () => void; onFinish: () => Promise<void> }) {
+function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurrentIndex, onDraftNote, onSaveItemNote, onFlushNotes, onSaveTitle, onSaveGeneral, onOpenSummary, onOpenHistory, onFinish }: { open: boolean; onOpenChange: (open: boolean) => void; detail: MeetingDetail | null; currentIndex: number; setCurrentIndex: (index: number) => void; onDraftNote: (itemId: string, note: string) => void; onSaveItemNote: (itemId: string, note: string) => Promise<void>; onFlushNotes: () => Promise<void>; onSaveTitle: (title: string) => Promise<MeetingDetail | null>; onSaveGeneral: (notes: string) => Promise<void>; onOpenSummary: () => void; onOpenHistory: () => Promise<void>; onFinish: () => Promise<void> }) {
   const item = detail?.items[currentIndex] || null;
   const standalone = Boolean(detail && detail.items.length === 0);
   const [generalNotes, setGeneralNotes] = useState(detail?.meeting.generalNotes || "");
+  const [notesDirty, setNotesDirty] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const savedGeneralNotesRef = useRef(detail?.meeting.generalNotes || "");
   const generalWriteRef = useRef<Promise<void>>(Promise.resolve());
   const currentMeetingIdRef = useRef(detail?.meeting.id);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const slidePaneRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    currentMeetingIdRef.current = detail?.meeting.id;
-    setGeneralNotes(detail?.meeting.generalNotes || "");
-    savedGeneralNotesRef.current = detail?.meeting.generalNotes || "";
-    generalWriteRef.current = Promise.resolve();
-  }, [detail?.meeting.id]);
 
   useEffect(() => {
     const sidebar = sidebarRef.current;
@@ -327,8 +332,13 @@ function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurre
     else if (bottom > sidebar.scrollTop + sidebar.clientHeight - 12) sidebar.scrollTop = bottom - sidebar.clientHeight + 12;
   }, [currentIndex, detail?.meeting.id]);
 
-  async function saveGeneralNotes() {
-    if (!standalone || generalNotes === savedGeneralNotesRef.current) return;
+  async function saveGeneralNotes(showFeedback = false) {
+    if (!standalone) return;
+    if (generalNotes === savedGeneralNotesRef.current) {
+      setNotesDirty(false);
+      if (showFeedback) toast.success("Toplantı notu güncel.");
+      return;
+    }
     const draft = generalNotes;
     const meetingId = detail?.meeting.id;
     setSavingNotes(true);
@@ -339,6 +349,8 @@ function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurre
     generalWriteRef.current = write;
     try {
       await write;
+      setNotesDirty(false);
+      if (showFeedback) toast.success("Toplantı notu kaydedildi.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Toplantı notu kaydedilemedi.");
       throw error;
@@ -368,6 +380,16 @@ function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurre
     await onFinish();
   }
 
+  async function openHistory() {
+    try {
+      if (standalone) await saveGeneralNotes();
+      else await onFlushNotes();
+      await onOpenHistory();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Toplantı notu kaydedilemedi.");
+    }
+  }
+
   function close() {
     if (standalone) void saveGeneralNotes().catch(() => undefined);
     onOpenChange(false);
@@ -378,14 +400,16 @@ function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurre
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key !== "Escape") return;
+      if (standalone && generalNotes !== savedGeneralNotesRef.current) void onSaveGeneral(generalNotes).catch(() => undefined);
+      onOpenChange(false);
     };
     document.addEventListener("keydown", handleEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [open, standalone, generalNotes, onOpenChange]);
+  }, [open, standalone, generalNotes, onOpenChange, onSaveGeneral]);
 
   if (!open) return null;
   return (
@@ -396,14 +420,14 @@ function PresentationDialog({ open, onOpenChange, detail, currentIndex, setCurre
           <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
             <header className="flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-[#0b1f38] px-3 py-3 text-white sm:px-6">
               <div className="min-w-0 flex-1"><Input key={detail.meeting.id} defaultValue={detail.meeting.title} onBlur={(event) => { const value = event.target.value.trim(); if (value && value !== detail.meeting.title) void onSaveTitle(value); }} className="h-9 max-w-xl border-white/10 bg-white/5 text-base font-semibold text-white shadow-none" aria-label="Toplantı başlığı" /><p className="mt-1 hidden text-xs text-slate-300 sm:block">{formatDate(detail.meeting.meetingDate)} · {standalone ? "Bağımsız toplantı notu" : `${detail.items.length} gündem maddesi`}</p></div>
-              <div className="flex items-center gap-1.5 sm:gap-2"><Button size="sm" variant="outline" className="border-white/20 bg-transparent px-2 text-white hover:bg-white/10 hover:text-white" onClick={() => void openSummary()} aria-label="Toplantı özetini aç"><Clipboard /><span className="hidden sm:inline">Toplantı Özeti</span></Button>{detail.meeting.status !== "Tamamlandı" && <Button size="sm" className="bg-emerald-600 px-2 text-white hover:bg-emerald-700" onClick={() => void finish()}><CheckCircle2 /> <span className="hidden sm:inline">Toplantıyı Bitir</span></Button>}<Button size="icon-sm" variant="ghost" className="text-white hover:bg-white/10 hover:text-white" onClick={close} aria-label="Toplantıyı kapat"><X /></Button></div>
+              <div className="flex items-center gap-1.5 sm:gap-2"><Button size="sm" variant="outline" className="border-white/20 bg-transparent px-2 text-white hover:bg-white/10 hover:text-white" onClick={() => void openHistory()} aria-label="Toplantı notları arşivini aç"><FileClock /><span className="hidden sm:inline">Arşiv</span></Button><Button size="sm" variant="outline" className="border-white/20 bg-transparent px-2 text-white hover:bg-white/10 hover:text-white" onClick={() => void openSummary()} aria-label="Toplantı özetini aç"><Clipboard /><span className="hidden sm:inline">Toplantı Özeti</span></Button>{detail.meeting.status !== "Tamamlandı" && <Button size="sm" className="bg-emerald-600 px-2 text-white hover:bg-emerald-700" onClick={() => void finish()}><CheckCircle2 /> <span className="hidden sm:inline">Toplantıyı Bitir</span></Button>}<Button size="icon-sm" variant="ghost" className="text-white hover:bg-white/10 hover:text-white" onClick={close} aria-label="Toplantıyı kapat"><X /></Button></div>
             </header>
             {standalone ? <div className="min-h-0 overflow-y-auto bg-slate-100 p-3 sm:p-6">
               <section className="mx-auto flex min-h-full max-w-3xl flex-col rounded-2xl bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="text-lg font-semibold text-[#17365d]">Genel toplantı notu</h2>
                 <p className="mt-1 text-sm text-slate-500">Kararları, sorumluları ve sonraki adımları yazın.</p>
-                <Textarea value={generalNotes} onChange={(event) => setGeneralNotes(event.target.value)} onBlur={() => { void saveGeneralNotes().catch(() => undefined); }} placeholder="Toplantı notlarını buraya yazın..." className="mt-4 min-h-[45vh] flex-1 resize-y border-slate-300 bg-slate-50 text-base leading-6" />
-                <div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">{savingNotes ? "Kaydediliyor..." : "Yazmayı bitirdiğinizde kaydedilir"}</span><Button variant="outline" onClick={() => void saveGeneralNotes().catch(() => undefined)}><Save /> Kaydet</Button></div>
+                <Textarea value={generalNotes} onChange={(event) => { setGeneralNotes(event.target.value); setNotesDirty(true); }} onBlur={() => { void saveGeneralNotes().catch(() => undefined); }} placeholder="Toplantı notlarını buraya yazın..." className="mt-4 min-h-[45vh] flex-1 resize-y border-slate-300 bg-slate-50 text-base leading-6" />
+                <div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">{savingNotes ? "Kaydediliyor..." : notesDirty ? "Kaydedilmeyi bekleyen değişiklik var" : "Tüm değişiklikler kaydedildi"}</span><Button className="bg-[#17365d]" disabled={savingNotes} onClick={() => void saveGeneralNotes(true).catch(() => undefined)}>{savingNotes ? <Loader2 className="animate-spin" /> : <Save />} Kaydet</Button></div>
               </section>
             </div> : item ? <div className="flex min-h-0">
               <aside ref={sidebarRef} className="hidden h-full min-h-0 w-64 shrink-0 overflow-y-auto overscroll-contain border-r border-white/10 bg-[#091a2f] p-3 lg:block">
@@ -506,24 +530,21 @@ function NoteEditor({ item, index, total, onPrevious, onNext, onDraft, onSave }:
   );
 }
 
-function MeetingHistoryDialog({ open, onOpenChange, meetings, loading, onOpenPresentation, onOpenSummary }: { open: boolean; onOpenChange: (open: boolean) => void; meetings: MeetingRecord[]; loading: boolean; onOpenPresentation: (id: string) => void; onOpenSummary: (id: string) => void }) {
+function MeetingHistoryDialog({ open, onOpenChange, meetings, loading, onNewNote, onOpenPresentation, onOpenSummary }: { open: boolean; onOpenChange: (open: boolean) => void; meetings: MeetingRecord[]; loading: boolean; onNewNote: () => Promise<void>; onOpenPresentation: (id: string) => void; onOpenSummary: (id: string) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="meeting-modal-safe max-h-[88vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader><DialogTitle>Toplantı Notları Geçmişi</DialogTitle><DialogDescription>Hazırlanan sunumlar ve toplantı sırasında kaydedilen notlar tarih sırasıyla saklanır.</DialogDescription></DialogHeader>
-        {loading ? <div className="grid min-h-48 place-items-center text-slate-500"><Loader2 className="size-6 animate-spin" /></div> : meetings.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center"><FileClock className="mx-auto size-9 text-slate-400" /><p className="mt-3 text-sm text-slate-500">Henüz toplantı kaydı bulunmuyor.</p></div> : <div className="space-y-3">{meetings.map((meeting) => <article key={meeting.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={meeting.status === "Tamamlandı" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-blue-200 bg-blue-50 text-blue-700"}>{meeting.status}</Badge><span className="text-xs text-slate-500">{formatDate(meeting.meetingDate)} · {meeting.selectedTaskCount ? `${meeting.selectedTaskCount} gündem` : "Bağımsız not"}</span></div><h3 className="mt-2 font-semibold text-slate-900">{meeting.title}</h3></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => onOpenSummary(meeting.id)}><Clipboard /> Notları Gör</Button><Button size="sm" className="bg-[#17365d]" onClick={() => onOpenPresentation(meeting.id)}>{meeting.selectedTaskCount ? <Presentation /> : <FileText />}{meeting.selectedTaskCount ? "Sunumu Aç" : "Notu Aç"}</Button></div></div></article>)}</div>}
+        <div className="flex flex-wrap items-start justify-between gap-3"><DialogHeader><DialogTitle>Toplantı Notları Arşivi</DialogTitle><DialogDescription>Tüm toplantı kayıtlarına ulaşabilir, eski notları açıp düzenleyebilirsiniz.</DialogDescription></DialogHeader><Button className="bg-[#17365d]" disabled={loading} onClick={() => void onNewNote()}><FileText /> Yeni Toplantı Notu</Button></div>
+        {loading ? <div className="grid min-h-48 place-items-center text-slate-500"><Loader2 className="size-6 animate-spin" /></div> : meetings.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center"><FileClock className="mx-auto size-9 text-slate-400" /><p className="mt-3 text-sm text-slate-500">Henüz toplantı kaydı bulunmuyor.</p></div> : <div className="space-y-3">{meetings.map((meeting) => <article key={meeting.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={meeting.status === "Tamamlandı" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-blue-200 bg-blue-50 text-blue-700"}>{meeting.status}</Badge><span className="text-xs text-slate-500">{formatDate(meeting.meetingDate)} · {meeting.selectedTaskCount ? `${meeting.selectedTaskCount} gündem` : "Bağımsız not"}</span></div><h3 className="mt-2 font-semibold text-slate-900">{meeting.title}</h3>{meeting.generalNotes && <p className="mt-1 line-clamp-2 text-sm leading-5 text-slate-500">{meeting.generalNotes}</p>}</div><div className="flex shrink-0 flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => onOpenSummary(meeting.id)}><Clipboard /> Özeti Gör</Button><Button size="sm" className="bg-[#17365d]" onClick={() => onOpenPresentation(meeting.id)}>{meeting.selectedTaskCount ? <Presentation /> : <FileText />}{meeting.selectedTaskCount ? "Sunum ve Notlar" : "Notu Düzenle"}</Button></div></div></article>)}</div>}
         <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Kapat</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function MeetingSummaryDialog({ open, onOpenChange, detail, onBackToPresentation, onSaveGeneral, onCopy, onEmail, onShare }: { open: boolean; onOpenChange: (open: boolean) => void; detail: MeetingDetail | null; onBackToPresentation: () => void; onSaveGeneral: (notes: string) => Promise<void>; onCopy: (detail: MeetingDetail) => void; onEmail: (detail: MeetingDetail) => void; onShare: (detail: MeetingDetail) => void }) {
+function MeetingSummaryDialog({ open, onOpenChange, detail, onBackToPresentation, onOpenHistory, onSaveGeneral, onCopy, onEmail, onShare }: { open: boolean; onOpenChange: (open: boolean) => void; detail: MeetingDetail | null; onBackToPresentation: () => void; onOpenHistory: () => Promise<void>; onSaveGeneral: (notes: string) => Promise<void>; onCopy: (detail: MeetingDetail) => void; onEmail: (detail: MeetingDetail) => void; onShare: (detail: MeetingDetail) => void }) {
   const [generalNotes, setGeneralNotes] = useState(detail?.meeting.generalNotes || "");
   const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    setGeneralNotes(detail?.meeting.generalNotes || "");
-  }, [detail?.meeting.id]);
   if (!detail) return null;
   const workingDetail = { ...detail, meeting: { ...detail.meeting, generalNotes } };
 
@@ -545,7 +566,7 @@ function MeetingSummaryDialog({ open, onOpenChange, detail, onBackToPresentation
         <div className="grid max-h-[92vh] min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] sm:h-auto sm:max-h-[92vh] max-sm:h-full max-sm:max-h-none">
           <DialogHeader className="flex flex-row items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 text-left sm:px-6">
             <div className="min-w-0"><DialogTitle className="truncate">{detail.meeting.title}</DialogTitle><DialogDescription>{formatDate(detail.meeting.meetingDate)} · {detail.items.length ? `${detail.items.length} gündem maddesi` : "Bağımsız not"} · {detail.meeting.status}</DialogDescription></div>
-            <Button size="icon-sm" variant="outline" className="shrink-0" onClick={() => onOpenChange(false)} aria-label="Toplantı özetini kapat"><X /></Button>
+            <div className="flex shrink-0 items-center gap-2"><Button size="sm" variant="outline" onClick={() => void onOpenHistory()}><FileClock /> <span className="hidden sm:inline">Arşiv</span></Button><Button size="icon-sm" variant="outline" onClick={() => onOpenChange(false)} aria-label="Toplantı özetini kapat"><X /></Button></div>
           </DialogHeader>
           <div className="min-h-0 space-y-6 overflow-y-auto overscroll-contain bg-slate-50 px-4 py-5 sm:px-6">
             {detail.items.length > 0 && <section className="space-y-3"><div className="flex items-center gap-2 text-sm font-semibold text-[#17365d]"><History className="size-4" /> Gündem notları</div>{detail.items.map((item, index) => <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-4"><div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17365d] text-xs font-bold text-white">{index + 1}</span><div className="min-w-0"><h3 className="font-semibold text-slate-900">{item.taskTitle}</h3><p className="mt-1 text-xs text-slate-500">{item.snapshot.task.status} · Sonraki adım: {item.snapshot.task.nextAction || "Belirlenmedi"}</p><p className={`mt-3 whitespace-pre-wrap text-sm leading-6 ${item.note.trim() ? "text-slate-700" : "italic text-slate-400"}`}>{item.note.trim() || "Bu gündem maddesi için toplantı notu girilmedi."}</p></div></div></article>)}</section>}
